@@ -9,3 +9,6 @@ filelock
 scipy
 prettytable
 scikit-image
+scikit-learn
+protobuf==3.20.3
+# paddlepaddle-gpu==3.3.0

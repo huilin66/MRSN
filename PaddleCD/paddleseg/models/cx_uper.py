@@ -12,7 +12,6 @@ from paddleseg.models.layers.attention import CBAM
 from paddleseg.models.backbones import resnet, convnext
 
 
-
 @manager.MODELS.add_component
 class CX_Uper_4B(nn.Layer):
     """
@@ -83,6 +82,433 @@ class CX_Uper_4B(nn.Layer):
 
         return [out]
 
+
+@manager.MODELS.add_component
+class CX_Uper_3B_1(nn.Layer):
+    """
+    The DSAMNet implementation based on PaddlePaddle.
+
+    The original article refers to
+        Q. Shi, et al., "A Deeply Supervised Attention Metric-Based Network and an Open Aerial Image Dataset for Remote Sensing
+        Change Detection"
+        (https://ieeexplore.ieee.org/document/9467555).
+
+    Note that this implementation differs from the original work in two aspects:
+    1. We do not use multiple dilation rates in layer 4 of the ResNet backbone.
+    2. A classification head is used in place of the original metric learning-based head to stablize the training process.
+
+    Args:
+        in_channels (int): The number of bands of the input images.
+        num_classes (int): The number of target classes.
+        ca_ratio (int, optional): The channel reduction ratio for the channel attention module. Default: 8.
+        sa_kernel (int, optional): The size of the convolutional kernel used in the spatial attention module. Default: 7.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 num_classes,
+                 backb,
+                 hsi_chs=242,
+                 dropout_rate=0.0,
+                 ):
+        super(CX_Uper_3B_1, self).__init__()
+        if backb == 'convnext_tiny':
+            self.backbone1 = convnext.convnext_tiny()
+            self.backbone2 = convnext.convnext_tiny(in_chans=2)
+            self.backbone3 = convnext.convnext_tiny(in_chans=hsi_chs)
+        elif backb == 'convnext_small':
+            self.backbone1 = convnext.convnext_small()
+            self.backbone2 = convnext.convnext_small(in_chans=2)
+            self.backbone3 = convnext.convnext_small(in_chans=hsi_chs)
+        else:
+            self.backbone1 = convnext.convnext_base()
+            self.backbone2 = convnext.convnext_base(in_chans=2)
+            self.backbone3 = convnext.convnext_base(in_chans=hsi_chs)
+
+        self.decode_head2b = UPerHead_3B(self.backbone1.dims[:3], num_classes=num_classes)
+        self.decode_head3b = UPerHead(self.backbone1.dims[:3], num_classes=num_classes)
+        self.drop = nn.Dropout2D(dropout_rate)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone1(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+        y2 = self.decode_head2b(fs_diff)
+        y3 = self.decode_head3b(fs3)
+        y = y2+y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+
+@manager.MODELS.add_component
+class CX_Uper_3B_2(nn.Layer):
+    """
+    The DSAMNet implementation based on PaddlePaddle.
+
+    The original article refers to
+        Q. Shi, et al., "A Deeply Supervised Attention Metric-Based Network and an Open Aerial Image Dataset for Remote Sensing
+        Change Detection"
+        (https://ieeexplore.ieee.org/document/9467555).
+
+    Note that this implementation differs from the original work in two aspects:
+    1. We do not use multiple dilation rates in layer 4 of the ResNet backbone.
+    2. A classification head is used in place of the original metric learning-based head to stablize the training process.
+
+    Args:
+        in_channels (int): The number of bands of the input images.
+        num_classes (int): The number of target classes.
+        ca_ratio (int, optional): The channel reduction ratio for the channel attention module. Default: 8.
+        sa_kernel (int, optional): The size of the convolutional kernel used in the spatial attention module. Default: 7.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 num_classes,
+                 backb,
+                 hsi_chs=242,
+                 dropout_rate=0.0,
+                 ):
+        super(CX_Uper_3B_2, self).__init__()
+        if backb == 'convnext_tiny':
+            self.backbone1 = convnext.convnext_tiny(in_chans=4)
+            self.backbone2 = convnext.convnext_tiny(in_chans=2)
+            self.backbone3 = convnext.convnext_tiny(in_chans=hsi_chs)
+        elif backb == 'convnext_small':
+            self.backbone1 = convnext.convnext_small(in_chans=4)
+            self.backbone2 = convnext.convnext_small(in_chans=2)
+            self.backbone3 = convnext.convnext_small(in_chans=hsi_chs)
+        else:
+            self.backbone1 = convnext.convnext_base(in_chans=4)
+            self.backbone2 = convnext.convnext_base(in_chans=2)
+            self.backbone3 = convnext.convnext_base(in_chans=hsi_chs)
+
+        self.decode_head2b = UPerHead_2B(self.backbone1.dims[:3], num_classes=num_classes)
+        self.decode_head3b = UPerHead(self.backbone1.dims[:3], num_classes=num_classes)
+        self.drop = nn.Dropout2D(dropout_rate)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :4, ...]
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f1, f2 in zip(fs1, fs2):
+            f = self.drop(paddle.concat([f1, f2], axis=1))
+            fs_diff.append(f)
+        y2 = self.decode_head2b(fs_diff)
+        y3 = self.decode_head3b(fs3)
+        y = y2+y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+@manager.MODELS.add_component
+class CX_Uper_4B_CA(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA, self).__init__(**kwargs)
+
+        # ⚠️ 修复 1：在 Paddle/PyTorch 中，保存子网络层不能用普通列表 []
+        # 必须用 nn.LayerList()，否则这些 Attention 层的参数不会被优化器更新！
+        self.cas1 = nn.LayerList()
+        self.cas2 = nn.LayerList()
+
+        for dim in self.backbone1.dims[:3]:
+            ca1 = nn.MultiHeadAttention(dim * 3, 8, kdim=dim, vdim=dim)
+            ca2 = nn.MultiHeadAttention(dim, 8, kdim=dim * 3, vdim=dim * 3)
+            self.cas1.append(ca1)
+            self.cas2.append(ca2)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        fs_diff_ca = []
+        fs3_ca = []
+
+        for ca1, ca2, f1, f2 in zip(self.cas1, self.cas2, fs_diff, fs3):
+            shape1, shape2 = f1.shape, f2.shape
+
+            # 🚀 优化：使用自适应池化来缩小 Key 和 Value 的空间分辨率
+            # 将 (H, W) 压缩到 (32, 32)，这样序列长度从 H*W 骤降到 1024！
+            # Query 的形状保持不变，确保输出的分辨率不缩水。
+            pool_size = (32, 32)  # 如果还是爆显存，可以改成 (16, 16)
+            f1_kv_pool = F.adaptive_avg_pool2d(f1, pool_size)
+            f2_kv_pool = F.adaptive_avg_pool2d(f2, pool_size)
+
+            # --- 处理 Q (保持原始大分辨率) ---
+            f1_q = f1.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))  # [B, H*W, C1]
+            f2_q = f2.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))  # [B, H*W, C2]
+
+            # --- 处理 K 和 V (使用池化后的小分辨率) ---
+            f1_kv = f1_kv_pool.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))  # [B, 1024, C1]
+            f2_kv = f2_kv_pool.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))  # [B, 1024, C2]
+
+            # --- 计算 Attention ---
+            # ca1: f1 作为 Query, f2 作为 Key 和 Value
+            ff1 = ca1(f1_q, f2_kv, f2_kv)
+            ff1 = ff1.transpose((0, 2, 1)).reshape((shape1[0], shape1[1], shape1[2], shape1[3]))
+
+            # ca2: f2 作为 Query, f1 作为 Key 和 Value
+            ff2 = ca2(f2_q, f1_kv, f1_kv)
+            ff2 = ff2.transpose((0, 2, 1)).reshape((shape2[0], shape2[1], shape2[2], shape2[3]))
+
+            fs_diff_ca.append(ff1)
+            fs3_ca.append(ff2)
+
+        # ⚠️ 修复 2：逻辑错误
+        # 原代码写的是 self.decode_head2b(fs_diff)，导致 Attention 算完后被抛弃了！
+        # 必须把计算出的 fs_diff_ca 和 fs3_ca 传给解码头
+        y2 = self.decode_head2b(fs_diff_ca)
+        y3 = self.decode_head3b(fs3_ca)
+
+        y = y2 + y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+@manager.MODELS.add_component
+class CX_Uper_4B_CA_FULL(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA_FULL, self).__init__(**kwargs)
+
+        self.cas1 = []
+        self.cas2 = []
+        for dim in self.backbone1.dims[:3]:
+            ca1 = nn.MultiHeadAttention(dim*3, 8, kdim=dim, vdim=dim)
+            ca2 = nn.MultiHeadAttention(dim, 8, kdim=dim*3, vdim=dim*3)
+            self.cas1.append(ca1)
+            self.cas2.append(ca2)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        fs_diff_ca = []
+        fs3_ca = []
+        for ca1, ca2, f1, f2 in zip(self.cas1, self.cas2, fs_diff, fs3):
+            shape1, shape2 = f1.shape, f2.shape
+            # print(f1.shape, f2.shape)
+            f1 = f1.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))
+            f2 = f2.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))
+            # print(f1.shape, f2.shape)
+            # print(ca1, ca2)
+            ff1 = ca1(f1, f2, f2)
+            ff1 = ff1.transpose((0, 2, 1)).reshape((shape1[0], shape1[1], shape1[2], shape1[3]))
+            ff2 = ca2(f2, f1, f1)
+            ff2 = ff2.transpose((0, 2, 1)).reshape((shape2[0], shape2[1], shape2[2], shape2[3]))
+            # print(ff1.shape, ff2.shape)
+            fs_diff_ca.append(ff1)
+            fs3_ca.append(ff2)
+        y2 = self.decode_head2b(fs_diff)
+        y3 = self.decode_head3b(fs3)
+        y = y2+y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+
+@manager.MODELS.add_component
+class CX_Uper_4B_CA_SRA(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA_SRA, self).__init__(**kwargs)
+
+        self.cas1 = nn.LayerList()
+        self.cas2 = nn.LayerList()
+
+        # 添加用于降维的卷积层 (保持空间相对位置)
+        self.sr1 = nn.LayerList()
+        self.sr2 = nn.LayerList()
+
+        for dim in self.backbone1.dims[:3]:
+            ca1 = nn.MultiHeadAttention(dim * 3, 8, kdim=dim, vdim=dim)
+            ca2 = nn.MultiHeadAttention(dim, 8, kdim=dim * 3, vdim=dim * 3)
+            self.cas1.append(ca1)
+            self.cas2.append(ca2)
+
+            # Stride=2 缩小一半，如果是极度缺显存可以设为 Stride=4
+            self.sr1.append(nn.Conv2D(dim, dim, kernel_size=3, stride=2, padding=1))
+            self.sr2.append(nn.Conv2D(dim * 3, dim * 3, kernel_size=3, stride=2, padding=1))
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        fs_diff_ca = []
+        fs3_ca = []
+
+        for ca1, ca2, sr1, sr2, f1, f2 in zip(self.cas1, self.cas2, self.sr1, self.sr2, fs_diff, fs3):
+            shape1, shape2 = f1.shape, f2.shape
+
+            # --- Q 保持全分辨率不变 ---
+            f1_q = f1.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))
+            f2_q = f2.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))
+
+            # --- K和V 使用卷积进行平滑降维 ---
+            f1_kv = sr2(f1)  # 注意通道数匹配
+            f2_kv = sr1(f2)
+
+            f1_kv = f1_kv.reshape((f1_kv.shape[0], f1_kv.shape[1], -1)).transpose((0, 2, 1))
+            f2_kv = f2_kv.reshape((f2_kv.shape[0], f2_kv.shape[1], -1)).transpose((0, 2, 1))
+
+            # --- 计算 Attention ---
+            ff1 = ca1(f1_q, f2_kv, f2_kv)
+            ff1 = ff1.transpose((0, 2, 1)).reshape((shape1[0], shape1[1], shape1[2], shape1[3]))
+
+            ff2 = ca2(f2_q, f1_kv, f1_kv)
+            ff2 = ff2.transpose((0, 2, 1)).reshape((shape2[0], shape2[1], shape2[2], shape2[3]))
+
+            fs_diff_ca.append(ff1)
+            fs3_ca.append(ff2)
+
+        # 传入 decode_head
+        y2 = self.decode_head2b(fs_diff_ca)
+        y3 = self.decode_head3b(fs3_ca)
+        y = y2+y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+@manager.MODELS.add_component
+class CX_Uper_4B_CA_Flash(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA_Flash, self).__init__(**kwargs)
+
+        self.num_heads = 8
+        self.q_projs = nn.LayerList()
+        self.k_projs = nn.LayerList()
+        self.v_projs = nn.LayerList()
+        self.out_projs = nn.LayerList()
+
+        # 为 backbone 的前三个 stage 定义 Cross-Attention 映射
+        # 这里以 ca1 (f1 为 Query, f2 为 Key/Value) 为例演示
+        # 如果需要双向 Cross-Attention，可以按照相同逻辑增加 ca2 的映射层
+        for dim in self.backbone1.dims[:3]:
+            # 输入维度：f1 为 dim*3 (concat后的), f2 为 dim
+            self.q_projs.append(nn.Linear(dim * 3, dim * 3))
+            self.k_projs.append(nn.Linear(dim, dim * 3))
+            self.v_projs.append(nn.Linear(dim, dim * 3))
+            self.out_projs.append(nn.Linear(dim * 3, dim * 3))
+
+    def _flash_attn_block(self, q_feat, kv_feat, q_proj, k_proj, v_proj, out_proj):
+        """
+        核心 FlashAttention 实现
+        q_feat: [B, C_q, H, W]
+        kv_feat: [B, C_kv, H, W]
+        """
+        B, C, H, W = q_feat.shape
+        N = H * W
+
+        # 1. 展平并映射
+        # [B, C, H, W] -> [B, N, C]
+        q = q_feat.reshape((B, C, N)).transpose((0, 2, 1))
+        kv = kv_feat.reshape((kv_feat.shape[0], kv_feat.shape[1], -1)).transpose((0, 2, 1))
+
+        q = q_proj(q)
+        k = k_proj(kv)
+        v = v_proj(kv)
+
+        # 2. 拆分多头 [B, N, num_heads, head_dim]
+        head_dim = C // self.num_heads
+        q = q.reshape((B, N, self.num_heads, head_dim)).transpose((0, 2, 1, 3))
+        k = k.reshape((B, k.shape[1], self.num_heads, head_dim)).transpose((0, 2, 1, 3))
+        v = v.reshape((B, v.shape[1], self.num_heads, head_dim)).transpose((0, 2, 1, 3))
+
+        # 3. 调用 FlashAttention 核心 API
+        # 该函数在底层会自动选择最优 Kernel，不产生中间的 N*N 矩阵
+        attn_out = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=None,
+            dropout_p=0.0,
+            is_causal=False,
+            training=self.training
+        )
+
+        # 4. 合并头并还原形状
+        attn_out = attn_out.transpose((0, 2, 1, 3)).reshape((B, N, C))
+        attn_out = out_proj(attn_out)
+        attn_out = attn_out.transpose((0, 2, 1)).reshape((B, C, H, W))
+
+        return attn_out
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+
+        # 骨干特征提取
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        # 执行 Flash Cross-Attention
+        fs_diff_ca = []
+        for i in range(len(fs_diff)):
+            # 这里实现 fs_diff 对 fs3 的交叉注意力
+            ff1 = self._flash_attn_block(
+                fs_diff[i], fs3[i],
+                self.q_projs[i], self.k_projs[i], self.v_projs[i], self.out_projs[i]
+            )
+            fs_diff_ca.append(ff1)
+
+        # 解码头
+        y2 = self.decode_head2b(fs_diff_ca)
+        y3 = self.decode_head3b(fs3)  # 若 fs3 也需要 CA，同理增加映射层即可
+
+        y = y2 + y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
 
 @manager.MODELS.add_component
 class CX_Uper_2B(nn.Layer):

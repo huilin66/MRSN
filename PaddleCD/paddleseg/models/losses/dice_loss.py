@@ -44,6 +44,7 @@ class DiceLoss(nn.Layer):
         logits = F.softmax(logits, axis=1)
 
         mask = (paddle.unsqueeze(labels, 1) != self.ignore_index)
+        mask = mask.astype('float32')
         logits = logits * mask
         labels_one_hot = labels_one_hot * mask
 

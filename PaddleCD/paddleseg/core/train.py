@@ -213,9 +213,9 @@ def train(model,
                 lr_sche = optimizer._learning_rate
             if isinstance(lr_sche, paddle.optimizer.lr.LRScheduler):
                 lr_sche.step()
-
             # model.clear_gradients()
-            avg_loss += loss.numpy()[0]
+            # avg_loss += loss.numpy()[0]
+            avg_loss += loss.numpy()
             if not avg_loss_list:
                 avg_loss_list = [l.numpy() for l in loss_list]
             else:
@@ -226,7 +226,8 @@ def train(model,
 
             if (iter) % log_iters == 0 and local_rank == 0:
                 avg_loss /= log_iters
-                avg_loss_list = [l[0] / log_iters for l in avg_loss_list]
+                # avg_loss_list = [l[0] / log_iters for l in avg_loss_list]
+                avg_loss_list = [float(l) / log_iters for l in avg_loss_list]
                 remain_iters = iters - iter
                 avg_train_batch_cost = batch_cost_averager.get_average()
                 avg_train_reader_cost = reader_cost_averager.get_average()
@@ -264,9 +265,9 @@ def train(model,
 
                 if test_config is None:
                     test_config = {}
-
+                val_batch_size=max(int(batch_size*0.5), 1)
                 mean_iou, acc, _, _, _ = evaluate(
-                    model, val_dataset, batch_size=int(batch_size*0.5), num_workers=num_workers, **test_config)
+                    model, val_dataset, batch_size=val_batch_size, num_workers=num_workers, **test_config)
 
                 model.train()
 

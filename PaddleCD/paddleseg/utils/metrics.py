@@ -46,8 +46,8 @@ def calculate_area(pred, label, num_classes, ignore_index=255):
     mask = label != ignore_index
     pred = pred + 1
     label = label + 1
-    pred = pred * mask
-    label = label * mask
+    pred = pred * mask.astype(pred.dtype)
+    label = label * mask.astype(label.dtype)
     pred = F.one_hot(pred, num_classes + 1)
     label = F.one_hot(label, num_classes + 1)
     pred = pred[:, :, :, 1:]
@@ -68,9 +68,12 @@ def calculate_area(pred, label, num_classes, ignore_index=255):
         label_area.append(label_area_i)
         intersect_area.append(intersect_area_i)
     # print(pred_area)
-    pred_area = paddle.concat(pred_area)
-    label_area = paddle.concat(label_area)
-    intersect_area = paddle.concat(intersect_area)
+    # pred_area = paddle.concat(pred_area)
+    # label_area = paddle.concat(label_area)
+    # intersect_area = paddle.concat(intersect_area)
+    intersect_area = paddle.concat([paddle.reshape(x, [1]) for x in intersect_area])
+    pred_area = paddle.concat([paddle.reshape(x, [1]) for x in pred_area])
+    label_area = paddle.concat([paddle.reshape(x, [1]) for x in label_area])
     return intersect_area, pred_area, label_area
 
 

@@ -1,0 +1,8 @@
+*.pyc
+*.pdopt
+*.pdparams
+
+.idea
+.idea/
+output/
+log/
