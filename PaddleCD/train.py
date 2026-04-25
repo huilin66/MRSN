@@ -83,7 +83,7 @@ def parse_args():
         dest='num_workers',
         help='Num workers for data loader',
         type=int,
-        default=0)
+        default=4)
     parser.add_argument(
         '--do_eval',
         dest='do_eval',
@@ -104,7 +104,7 @@ def parse_args():
         '--seed',
         dest='seed',
         help='Set the random seed during training.',
-        default=None,
+        default=1919810,
         type=int)
     parser.add_argument(
         '--fp16', dest='fp16', help='Whther to use amp', action='store_true')
