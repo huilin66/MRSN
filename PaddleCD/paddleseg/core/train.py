@@ -261,11 +261,9 @@ def train(model,
 
             if (iter % save_interval == 0
                     or iter == iters) and (val_dataset is not None):
-                num_workers = 1 if num_workers > 0 else 0
-
                 if test_config is None:
                     test_config = {}
-                val_batch_size=max(int(batch_size*0.5), 1)
+                val_batch_size=batch_size
                 mean_iou, acc, _, _, _ = evaluate(
                     model, val_dataset, batch_size=val_batch_size, num_workers=num_workers, **test_config)
 

@@ -97,9 +97,6 @@ def evaluate(model,
             im1, im2, label = data
             reader_cost_averager.record(time.time() - batch_start)
             label = label.astype('int64')
-            # print(im1[:, :, :5, :5])
-            # print(im2[:, :, :5, :5])
-            # print(label[:, :5, :5])
             ori_shape = label.shape[-2:]
             if aug_eval:
                 pred = infer.aug_inference(
@@ -179,7 +176,6 @@ def evaluate(model,
         logger.info(
             "[EVAL] #Images: {} f1: {:.4f}, mIoU: {:.4f} Acc: {:.4f} Kappa: {:.4f} ".format(
                 len(eval_dataset), f1, miou, acc, kappa))
-        print(class_f1)
         logger.info("[EVAL] Class IoU: \n" + str(np.round(class_iou, 4)))
         logger.info("[EVAL] Class Acc: \n" + str(np.round(class_acc, 4)))
         logger.info("[EVAL] Class F1: \n" + str(np.round(class_f1, 4)))
