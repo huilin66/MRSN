@@ -69,7 +69,9 @@ class Config(object):
                  path: str,
                  learning_rate: float = None,
                  batch_size: int = None,
-                 iters: int = None):
+                 iters: int = None,
+                 save_interval: int = None,
+                 log_iters: int = None,):
         if not path:
             raise ValueError('Please specify the configuration file path.')
 
@@ -84,7 +86,7 @@ class Config(object):
             raise RuntimeError('Config file should in yaml format!')
 
         self.update(
-            learning_rate=learning_rate, batch_size=batch_size, iters=iters)
+            learning_rate=learning_rate, batch_size=batch_size, iters=iters, save_interval=save_interval, log_iters=log_iters)
 
     def _update_dic(self, dic, base_dic):
         """
@@ -115,7 +117,9 @@ class Config(object):
     def update(self,
                learning_rate: float = None,
                batch_size: int = None,
-               iters: int = None):
+               iters: int = None,
+               save_interval: int = None,
+               log_iters: int = None,):
         '''Update config'''
         if learning_rate:
             if 'lr_scheduler' in self.dic:
@@ -129,9 +133,23 @@ class Config(object):
         if iters:
             self.dic['iters'] = iters
 
+        if save_interval:
+            self.dic['save_interval'] = save_interval
+
+        if log_iters:
+            self.dic['log_iters'] = log_iters
+
     @property
     def batch_size(self) -> int:
         return self.dic.get('batch_size', 1)
+
+    @property
+    def save_interval(self) -> int:
+        return self.dic.get('save_interval', 1)
+
+    @property
+    def log_iters(self) -> int:
+        return self.dic.get('log_iters', 1)
 
     @property
     def iters(self) -> int:

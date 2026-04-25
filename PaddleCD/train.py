@@ -26,8 +26,7 @@ from paddleseg.cvlibs import manager, Config
 from paddleseg.utils import get_sys_env, logger, config_check
 from paddleseg.core import train
 
-# yml1_path = r'E:\0_Python\04_code_read\PaddleCD\ocrnet\ocrnet_hrnetw18_cityscapes_1024x512_160k.yml'
-yml2_path = r'./cd_config/ocrnet.yml'
+yml2_path = r'/localnvme/project/MRSN/PaddleCD/c2seg_config/cxup_4b_BW.yml'
 
 
 def parse_args():
@@ -47,7 +46,7 @@ def parse_args():
         dest='batch_size',
         help='Mini batch size of one gpu or cpu',
         type=int,
-        default=1)
+        default=None)
     parser.add_argument(
         '--learning_rate',
         dest='learning_rate',
@@ -59,7 +58,7 @@ def parse_args():
         dest='save_interval',
         help='How many iters to save a model snapshot once during training.',
         type=int,
-        default=2)
+        default=None)
     parser.add_argument(
         '--resume_model',
         dest='resume_model',
@@ -93,7 +92,7 @@ def parse_args():
         '--log_iters',
         dest='log_iters',
         help='Display logging information at every log_iters',
-        default=1,
+        default=None,
         type=int)
     parser.add_argument(
         '--use_vdl',
@@ -182,8 +181,8 @@ def main(args):
         iters=cfg.iters,
         batch_size=cfg.batch_size,
         resume_model=args.resume_model,
-        save_interval=args.save_interval,
-        log_iters=args.log_iters,
+        save_interval=cfg.save_interval,
+        log_iters=cfg.log_iters,
         num_workers=args.num_workers,
         use_vdl=args.use_vdl,
         losses=losses,
