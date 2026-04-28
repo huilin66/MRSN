@@ -290,6 +290,110 @@ class CX_Uper_4B_CA(CX_Uper_4B):
 
         return [out]
 
+
+class FlashMultiHeadAttention(nn.Layer):
+    def __init__(self, embed_dim, num_heads, kdim=None, vdim=None, dropout=0.0, causal=False):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.causal = causal
+        self.dropout = dropout
+
+        self.kdim = kdim if kdim is not None else embed_dim
+        self.vdim = vdim if vdim is not None else embed_dim
+
+        self.head_dim = embed_dim // num_heads  # 自动计算每个头的维度
+
+        # QKV 线性投影（和标准 MHA 完全一样）
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(self.kdim, embed_dim)
+        self.v_proj = nn.Linear(self.vdim, embed_dim)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+
+    def forward(self, q, k=None, v=None):
+        if k is None:
+            k = q
+        if v is None:
+            v = q
+
+        B, S_q, _ = q.shape  # [batch, seq_len, embed_dim]
+        B, S_k, _ = k.shape
+
+        q = self.q_proj(q)  # [B, S, D]
+        k = self.k_proj(k)
+        v = self.v_proj(v)
+
+
+        q = q.reshape((B, -1, self.num_heads, self.head_dim))
+        k = k.reshape((B, -1, self.num_heads, self.head_dim))
+        v = v.reshape((B, -1, self.num_heads, self.head_dim))
+
+        # 3. 调用 FlashAttention 核心 API
+        # 该函数在底层会自动选择最优 Kernel，不产生中间的 N*N 矩阵
+        attn_out = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=None,
+            dropout_p=0.0,
+            is_causal=False,
+            training=self.training
+        )
+        attn_out_reshape = attn_out.reshape([B, S_q, self.embed_dim])
+
+        # 5. 输出投影
+        output = self.out_proj(attn_out_reshape)
+        return output
+
+@manager.MODELS.add_component
+class CX_Uper_4B_CA_FLASH(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA_FLASH, self).__init__(**kwargs)
+
+        self.cas1 = []
+        self.cas2 = []
+        for dim in self.backbone1.dims[:3]:
+            ca1 = FlashMultiHeadAttention(dim*3, 8, kdim=dim, vdim=dim)
+            ca2 = FlashMultiHeadAttention(dim, 8, kdim=dim*3, vdim=dim*3)
+            self.cas1.append(ca1)
+            self.cas2.append(ca2)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        fs_diff_ca = []
+        fs3_ca = []
+        for ca1, ca2, f1, f2 in zip(self.cas1, self.cas2, fs_diff, fs3):
+            shape1, shape2 = f1.shape, f2.shape
+            # print(f1.shape, f2.shape)
+            f1 = f1.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))
+            f2 = f2.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))
+            # print(f1.shape, f2.shape)
+            # print(ca1, ca2)
+            ff1 = ca1(f1, f2, f2)
+            ff1 = ff1.transpose((0, 2, 1)).reshape((shape1[0], shape1[1], shape1[2], shape1[3]))
+            ff2 = ca2(f2, f1, f1)
+            ff2 = ff2.transpose((0, 2, 1)).reshape((shape2[0], shape2[1], shape2[2], shape2[3]))
+            # print(ff1.shape, ff2.shape)
+            fs_diff_ca.append(ff1)
+            fs3_ca.append(ff2)
+        y2 = self.decode_head2b(fs_diff)
+        y3 = self.decode_head3b(fs3)
+        y = y2+y3
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
 @manager.MODELS.add_component
 class CX_Uper_4B_CA_FULL(CX_Uper_4B):
     def __init__(self, **kwargs):
@@ -412,103 +516,103 @@ class CX_Uper_4B_CA_SRA(CX_Uper_4B):
 
         return [out]
 
-@manager.MODELS.add_component
-class CX_Uper_4B_CA_Flash(CX_Uper_4B):
-    def __init__(self, **kwargs):
-        super(CX_Uper_4B_CA_Flash, self).__init__(**kwargs)
-
-        self.num_heads = 8
-        self.q_projs = nn.LayerList()
-        self.k_projs = nn.LayerList()
-        self.v_projs = nn.LayerList()
-        self.out_projs = nn.LayerList()
-
-        # 为 backbone 的前三个 stage 定义 Cross-Attention 映射
-        # 这里以 ca1 (f1 为 Query, f2 为 Key/Value) 为例演示
-        # 如果需要双向 Cross-Attention，可以按照相同逻辑增加 ca2 的映射层
-        for dim in self.backbone1.dims[:3]:
-            # 输入维度：f1 为 dim*3 (concat后的), f2 为 dim
-            self.q_projs.append(nn.Linear(dim * 3, dim * 3))
-            self.k_projs.append(nn.Linear(dim, dim * 3))
-            self.v_projs.append(nn.Linear(dim, dim * 3))
-            self.out_projs.append(nn.Linear(dim * 3, dim * 3))
-
-    def _flash_attn_block(self, q_feat, kv_feat, q_proj, k_proj, v_proj, out_proj):
-        """
-        核心 FlashAttention 实现
-        q_feat: [B, C_q, H, W]
-        kv_feat: [B, C_kv, H, W]
-        """
-        B, C, H, W = q_feat.shape
-        N = H * W
-
-        # 1. 展平并映射
-        # [B, C, H, W] -> [B, N, C]
-        q = q_feat.reshape((B, C, N)).transpose((0, 2, 1))
-        kv = kv_feat.reshape((kv_feat.shape[0], kv_feat.shape[1], -1)).transpose((0, 2, 1))
-
-        q = q_proj(q)
-        k = k_proj(kv)
-        v = v_proj(kv)
-
-        # 2. 拆分多头 [B, N, num_heads, head_dim]
-        head_dim = C // self.num_heads
-        q = q.reshape((B, N, self.num_heads, head_dim)).transpose((0, 2, 1, 3))
-        k = k.reshape((B, k.shape[1], self.num_heads, head_dim)).transpose((0, 2, 1, 3))
-        v = v.reshape((B, v.shape[1], self.num_heads, head_dim)).transpose((0, 2, 1, 3))
-
-        # 3. 调用 FlashAttention 核心 API
-        # 该函数在底层会自动选择最优 Kernel，不产生中间的 N*N 矩阵
-        attn_out = F.scaled_dot_product_attention(
-            q, k, v,
-            attn_mask=None,
-            dropout_p=0.0,
-            is_causal=False,
-            training=self.training
-        )
-
-        # 4. 合并头并还原形状
-        attn_out = attn_out.transpose((0, 2, 1, 3)).reshape((B, N, C))
-        attn_out = out_proj(attn_out)
-        attn_out = attn_out.transpose((0, 2, 1)).reshape((B, C, H, W))
-
-        return attn_out
-
-    def forward(self, t1, t2):
-        t3 = t2
-        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
-        t2 = t1[:, 4:, ...]
-        t1 = t1[:, :3, ...]
-
-        # 骨干特征提取
-        fs0 = self.backbone0(t0)
-        fs1 = self.backbone1(t1)
-        fs2 = self.backbone2(t2)
-        fs3 = self.backbone3(t3)
-
-        fs_diff = []
-        for f0, f1, f2 in zip(fs0, fs1, fs2):
-            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
-            fs_diff.append(f)
-
-        # 执行 Flash Cross-Attention
-        fs_diff_ca = []
-        for i in range(len(fs_diff)):
-            # 这里实现 fs_diff 对 fs3 的交叉注意力
-            ff1 = self._flash_attn_block(
-                fs_diff[i], fs3[i],
-                self.q_projs[i], self.k_projs[i], self.v_projs[i], self.out_projs[i]
-            )
-            fs_diff_ca.append(ff1)
-
-        # 解码头
-        y2 = self.decode_head2b(fs_diff_ca)
-        y3 = self.decode_head3b(fs3)  # 若 fs3 也需要 CA，同理增加映射层即可
-
-        y = y2 + y3
-        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
-
-        return [out]
+# @manager.MODELS.add_component
+# class CX_Uper_4B_CA_Flash(CX_Uper_4B):
+#     def __init__(self, **kwargs):
+#         super(CX_Uper_4B_CA_Flash, self).__init__(**kwargs)
+#
+#         self.num_heads = 8
+#         self.q_projs = nn.LayerList()
+#         self.k_projs = nn.LayerList()
+#         self.v_projs = nn.LayerList()
+#         self.out_projs = nn.LayerList()
+#
+#         # 为 backbone 的前三个 stage 定义 Cross-Attention 映射
+#         # 这里以 ca1 (f1 为 Query, f2 为 Key/Value) 为例演示
+#         # 如果需要双向 Cross-Attention，可以按照相同逻辑增加 ca2 的映射层
+#         for dim in self.backbone1.dims[:3]:
+#             # 输入维度：f1 为 dim*3 (concat后的), f2 为 dim
+#             self.q_projs.append(nn.Linear(dim * 3, dim * 3))
+#             self.k_projs.append(nn.Linear(dim, dim * 3))
+#             self.v_projs.append(nn.Linear(dim, dim * 3))
+#             self.out_projs.append(nn.Linear(dim * 3, dim * 3))
+#
+#     def _flash_attn_block(self, q_feat, kv_feat, q_proj, k_proj, v_proj, out_proj):
+#         """
+#         核心 FlashAttention 实现
+#         q_feat: [B, C_q, H, W]
+#         kv_feat: [B, C_kv, H, W]
+#         """
+#         B, C, H, W = q_feat.shape
+#         N = H * W
+#
+#         # 1. 展平并映射
+#         # [B, C, H, W] -> [B, N, C]
+#         q = q_feat.reshape((B, C, N)).transpose((0, 2, 1))
+#         kv = kv_feat.reshape((kv_feat.shape[0], kv_feat.shape[1], -1)).transpose((0, 2, 1))
+#
+#         q = q_proj(q)
+#         k = k_proj(kv)
+#         v = v_proj(kv)
+#
+#         # 2. 拆分多头 [B, N, num_heads, head_dim]
+#         head_dim = C // self.num_heads
+#         q = q.reshape((B, N, self.num_heads, head_dim)).transpose((0, 2, 1, 3))
+#         k = k.reshape((B, k.shape[1], self.num_heads, head_dim)).transpose((0, 2, 1, 3))
+#         v = v.reshape((B, v.shape[1], self.num_heads, head_dim)).transpose((0, 2, 1, 3))
+#
+#         # 3. 调用 FlashAttention 核心 API
+#         # 该函数在底层会自动选择最优 Kernel，不产生中间的 N*N 矩阵
+#         attn_out = F.scaled_dot_product_attention(
+#             q, k, v,
+#             attn_mask=None,
+#             dropout_p=0.0,
+#             is_causal=False,
+#             training=self.training
+#         )
+#
+#         # 4. 合并头并还原形状
+#         attn_out = attn_out.transpose((0, 2, 1, 3)).reshape((B, N, C))
+#         attn_out = out_proj(attn_out)
+#         attn_out = attn_out.transpose((0, 2, 1)).reshape((B, C, H, W))
+#
+#         return attn_out
+#
+#     def forward(self, t1, t2):
+#         t3 = t2
+#         t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+#         t2 = t1[:, 4:, ...]
+#         t1 = t1[:, :3, ...]
+#
+#         # 骨干特征提取
+#         fs0 = self.backbone0(t0)
+#         fs1 = self.backbone1(t1)
+#         fs2 = self.backbone2(t2)
+#         fs3 = self.backbone3(t3)
+#
+#         fs_diff = []
+#         for f0, f1, f2 in zip(fs0, fs1, fs2):
+#             f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+#             fs_diff.append(f)
+#
+#         # 执行 Flash Cross-Attention
+#         fs_diff_ca = []
+#         for i in range(len(fs_diff)):
+#             # 这里实现 fs_diff 对 fs3 的交叉注意力
+#             ff1 = self._flash_attn_block(
+#                 fs_diff[i], fs3[i],
+#                 self.q_projs[i], self.k_projs[i], self.v_projs[i], self.out_projs[i]
+#             )
+#             fs_diff_ca.append(ff1)
+#
+#         # 解码头
+#         y2 = self.decode_head2b(fs_diff_ca)
+#         y3 = self.decode_head3b(fs3)  # 若 fs3 也需要 CA，同理增加映射层即可
+#
+#         y = y2 + y3
+#         out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+#
+#         return [out]
 
 @manager.MODELS.add_component
 class CX_Uper_2B(nn.Layer):

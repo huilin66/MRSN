@@ -1,7 +1,7 @@
 _base_: 'C2Seg_BW.yml'
 
 model:
-  type: CX_Uper_4B_CA_Flash
+  type: CX_Uper_4B_CA_FLASH
   backb: convnext_tiny
   in_channels: 3
   num_classes: 14
