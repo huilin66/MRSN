@@ -56,6 +56,7 @@ class HRNet(nn.Layer):
     """
 
     def __init__(self,
+                 in_channels=3,
                  pretrained=None,
                  stage1_num_modules=1,
                  stage1_num_blocks=(4, ),
@@ -91,7 +92,7 @@ class HRNet(nn.Layer):
         self.feat_channels = [sum(stage4_num_channels)]
 
         self.conv_layer1_1 = layers.ConvBNReLU(
-            in_channels=3,
+            in_channels=in_channels,
             out_channels=64,
             kernel_size=3,
             stride=2,

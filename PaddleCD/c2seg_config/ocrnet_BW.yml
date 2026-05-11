@@ -1,0 +1,26 @@
+_base_: 'C2Seg_BW.yml'
+
+model:
+  type: OCRNet
+  backbone:
+    type: HRNet_W18
+    in_channels: 122
+    pretrained: https://bj.bcebos.com/paddleseg/dygraph/hrnet_w18_ssld.tar.gz
+  num_classes: 14
+  backbone_indices: [0]
+
+loss:
+  types:
+    - type: MixedLoss
+      losses:
+        - type: CrossEntropyLoss_Smooth
+          smoothing: 0.05
+        - type: DiceLoss
+      coef: [ 1, 0.5 ]
+    - type: MixedLoss
+      losses:
+        - type: CrossEntropyLoss_Smooth
+          smoothing: 0.05
+        - type: DiceLoss
+      coef: [ 1, 0.5 ]
+  coef: [1, 0.4]

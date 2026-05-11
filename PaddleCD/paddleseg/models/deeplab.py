@@ -78,7 +78,9 @@ class DeepLabV3P(nn.Layer):
         self.data_format = data_format
         self.init_weight()
 
-    def forward(self, x):
+    def forward(self, x, aug_x=None):
+        if aug_x is not None:
+            x = paddle.concat([x, aug_x], axis=1)
         feat_list = self.backbone(x)
         logit_list = self.head(feat_list)
         if self.data_format == 'NCHW':

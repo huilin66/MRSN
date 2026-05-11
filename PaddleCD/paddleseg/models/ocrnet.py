@@ -67,16 +67,16 @@ class OCRNet(nn.Layer):
         self.pretrained = pretrained
         self.init_weight()
 
-    def forward(self, x1, x2):
-        feats1 = self.backbone(x1)
-        feats2 = self.backbone(x2)
-        featsbin = [paddle.abs(feats1[i]-feats2[i]) for i in self.backbone_indices]
-        logit_list = self.head(featsbin)
+    def forward(self, x, aug_x=None):
+        if aug_x is not None:
+            x = paddle.concat([x, aug_x], axis=1)
+        feat_list = self.backbone(x)
+        logit_list = self.head(feat_list)
 
         logit_list = [
             F.interpolate(
                 logit,
-                paddle.shape(x1)[2:],
+                paddle.shape(x)[2:],
                 mode='bilinear',
                 align_corners=self.align_corners) for logit in logit_list
         ]

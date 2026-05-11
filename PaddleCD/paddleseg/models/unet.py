@@ -40,13 +40,14 @@ class UNet(nn.Layer):
     """
 
     def __init__(self,
+                 in_channels,
                  num_classes,
                  align_corners=False,
                  use_deconv=False,
                  pretrained=None):
         super().__init__()
 
-        self.encode = Encoder()
+        self.encode = Encoder(input_chs=in_channels)
         self.decode = Decoder(align_corners, use_deconv=use_deconv)
         self.cls = self.conv = nn.Conv2D(
             in_channels=64,
@@ -58,7 +59,9 @@ class UNet(nn.Layer):
         self.pretrained = pretrained
         self.init_weight()
 
-    def forward(self, x):
+    def forward(self, x, aug_x=None):
+        if aug_x is not None:
+            x = paddle.concat([x, aug_x], axis=1)
         logit_list = []
         x, short_cuts = self.encode(x)
         x = self.decode(x, short_cuts)
@@ -72,11 +75,11 @@ class UNet(nn.Layer):
 
 
 class Encoder(nn.Layer):
-    def __init__(self):
+    def __init__(self, input_chs=3):
         super().__init__()
 
         self.double_conv = nn.Sequential(
-            layers.ConvBNReLU(3, 64, 3), layers.ConvBNReLU(64, 64, 3))
+            layers.ConvBNReLU(input_chs, 64, 3), layers.ConvBNReLU(64, 64, 3))
         down_channels = [[64, 128], [128, 256], [256, 512], [512, 512]]
         self.down_sample_list = nn.LayerList([
             self.down_sampling(channel[0], channel[1])
