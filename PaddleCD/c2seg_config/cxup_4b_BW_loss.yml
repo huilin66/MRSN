@@ -15,6 +15,6 @@ loss:
       losses:
         - type: OhemCrossEntropyLoss_Smooth
           smoothing: 0.05
-#        - type: LovaszSoftmaxLoss
+        - type: DiceLoss
       coef: [1, 0.5]
   coef: [1]
