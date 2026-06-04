@@ -1,107 +1,82 @@
 import argparse
 import os
-# 在最开始设置虚拟显示
-os.environ['DISPLAY'] = ':99'
-os.system('Xvfb :99 -screen 0 1024x768x24 +extension GLX &')
-os.system('sleep 1')  # 等待Xvfb启动
 import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 import matplotlib.pyplot as plt
-from spectral import *  # 高光谱处理库
-import numpy as np
-import rasterio
-import scipy.io as sio
-import  os
-import scipy.io as sio
-from spectral import *
+from scipy.ndimage import zoom
+import warnings
 
+# 忽略警告
+warnings.filterwarnings('ignore')
 
-
-
-def read_downsampled(path, scale):
-    """读取并降采样TIFF文件，返回 (bands, height, width)"""
-    from skimage import io
-    from skimage.transform import rescale
-    
-    data = io.imread(path)  # (height, width, bands) 或 (height, width)
-    
-    if data.ndim == 2:
-        data = data[np.newaxis, :, :]  # (1, height, width)
-    else:
-        data = np.transpose(data, (2, 0, 1))  # (bands, height, width)
-    
-    if scale > 1:
-        from scipy.ndimage import zoom
-        data = zoom(data, (1, 1/scale, 1/scale), order=1)
-    
-    return data.astype('float32')
-
-def autoscale(band, pmin=2, pmax=98):
-    """自动缩放波段值"""
-    if np.all(np.isfinite(band)) and (band.max() == band.min()):
-        return band.min(), band.max()
-    lo, hi = np.percentile(band[np.isfinite(band)], (pmin, pmax))
-    if lo == hi:
-        lo, hi = band.min(), band.max()
-    return float(lo), float(hi)
-
-def show_tiff_bands(path, cmaps=None, bands=None, downsample=4, pmin=2, pmax=98, 
-                    figsize=(15,5), save_path=None):
+def read_tiff_data(path, downsample=1):
     """
-    显示TIFF波段，可选择不同色带和保存为PNG
+    读取TIFF数据并可选降采样
     
     Parameters:
     -----------
     path : str
         TIFF文件路径
-    cmaps : list
-        色带列表
-    bands : list
-        要显示的波段（1-based）
     downsample : int
-        降采样因子
-    pmin, pmax : float
-        自动缩放的百分位数
-    figsize : tuple
-        图像大小
-    save_path : str
-        保存PNG的路径，如果为None则只显示
+        降采样因子（1=不降采样）
+    
+    Returns:
+    --------
+    data : numpy.ndarray
+        形状为 (bands, height, width) 的数组
     """
-    data = read_downsampled(path, downsample)
-    n_bands = data.shape[0]
+    with rasterio.open(path) as src:
+        if downsample <= 1:
+            data = src.read()
+        else:
+            out_shape = (
+                src.count,
+                int(src.height / downsample),
+                int(src.width / downsample)
+            )
+            data = src.read(
+                out_shape=out_shape,
+                resampling=Resampling.average
+            )
+        return data.astype('float32')
+
+
+def stretch_band(band, pmin=2, pmax=98):
+    """
+    对单个波段进行百分比拉伸
     
-    if bands is None:
-        band_idxs = list(range(1, n_bands+1))
-    else:
-        # allow 1-based indices in CLI
-        band_idxs = [b if b>0 else n_bands+b+1 for b in bands]
+    Parameters:
+    -----------
+    band : numpy.ndarray
+        输入的波段数据
+    pmin, pmax : float
+        拉伸的百分位数
     
-    cmaps = cmaps or []
-    # make sure cmaps list matches number of bands to show (repeat last if needed)
-    cmap_list = [cmaps[i] if i < len(cmaps) else 'gray' for i in range(len(band_idxs))]
+    Returns:
+    --------
+    stretched : numpy.ndarray
+        拉伸到 [0, 1] 范围的数据
+    """
+    valid_mask = np.isfinite(band)
+    if not np.any(valid_mask):
+        return np.zeros_like(band)
     
-    plt.figure(figsize=figsize)
-    n = len(band_idxs)
+    valid_data = band[valid_mask]
+    lo, hi = np.percentile(valid_data, (pmin, pmax))
     
-    for i, b in enumerate(band_idxs, start=1):
-        arr = data[b-1]
-        vmin, vmax = autoscale(arr, pmin=pmin, pmax=pmax)
-        ax = plt.subplot(1, n, i)
-        im = ax.imshow(arr, cmap=cmap_list[i-1], vmin=vmin, vmax=vmax)
-        ax.set_title(f'Band {b} ({cmap_list[i-1]})')
-        ax.axis('off')
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.01)
+    if lo == hi:
+        lo = valid_data.min()
+        hi = valid_data.max()
+        if lo == hi:  # 如果还是相等，返回全0
+            return np.zeros_like(band)
     
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"图像已保存到: {save_path}")
-    else:
-        plt.show()
-    plt.close()
-def extract_rgb(tiff_path, r_band, g_band, b_band, downsample=4, pmin=2, pmax=98, save_path=None):
+    stretched = np.clip((band - lo) / (hi - lo), 0, 1)
+    return stretched
+
+
+def extract_rgb(tiff_path, r_band, g_band, b_band, downsample=4, 
+                pmin=2, pmax=98, save_path=None):
     """
     从多波段TIFF中提取3个指定波段，合成RGB图像
     
@@ -109,232 +84,547 @@ def extract_rgb(tiff_path, r_band, g_band, b_band, downsample=4, pmin=2, pmax=98
     -----------
     tiff_path : str
         TIFF文件路径
-    r_band : int
-        红色通道对应的波段索引（1-based）
-    g_band : int
-        绿色通道对应的波段索引（1-based）
-    b_band : int
-        蓝色通道对应的波段索引（1-based）
+    r_band, g_band, b_band : int
+        RGB通道对应的波段索引（1-based）
     downsample : int
         降采样因子（默认4）
     pmin, pmax : float
         自动缩放的百分位数（默认2, 98）
     save_path : str
-        保存PNG的路径，如果为None则返回RGB数组
+        保存PNG的路径
     
     Returns:
     --------
     rgb_image : numpy.ndarray
-        RGB图像数组 (H, W, 3)，仅在save_path为None时返回
+        RGB图像数组 (H, W, 3)
     """
-    # 读取数据
-    with rasterio.open(tiff_path) as src:
-        if downsample <= 1:
-            data = src.read()
-        else:
-            out_shape = (src.count,
-                         int(src.height / downsample),
-                         int(src.width / downsample))
-            data = src.read(
-                out_shape=out_shape,
-                resampling=Resampling.average
-            )
-        data = data.astype('float32')
+    print(f"读取文件: {tiff_path}")
     
-    # 提取RGB波段（转换为0-based索引）
-    r_data = data[r_band - 1]
-    g_data = data[g_band - 1]
-    b_data = data[b_band - 1]
-    
-    # 对每个波段进行独立拉伸
-    def stretch_band(band):
-        lo, hi = np.percentile(band[np.isfinite(band)], (pmin, pmax))
-        if lo == hi:
-            lo, hi = band.min(), band.max()
-        return np.clip((band - lo) / (hi - lo), 0, 1)
-    
-    # 组合RGB并拉伸到[0, 1]
-    rgb = np.stack([
-        stretch_band(r_data),
-        stretch_band(g_data),
-        stretch_band(b_data)
-    ], axis=-1)
-    
-    # 保存或返回
-    if save_path:
-        plt.imsave(save_path, rgb)
-        print(f"RGB图像已保存到: {save_path}")
-    else:
+    try:
+        # 读取数据
+        data = read_tiff_data(tiff_path, downsample)
+        print(f"数据形状: {data.shape}, 波段数: {data.shape[0]}")
+        
+        # 检查波段索引是否有效
+        max_band = data.shape[0]
+        for band_name, band_idx in [('R', r_band), ('G', g_band), ('B', b_band)]:
+            if band_idx > max_band or band_idx < 1:
+                raise ValueError(f"{band_name}波段索引 {band_idx} 超出范围 [1, {max_band}]")
+        
+        # 提取RGB波段（转换为0-based索引）
+        r_data = data[r_band - 1]
+        g_data = data[g_band - 1]
+        b_data = data[b_band - 1]
+        
+        # 对每个波段进行独立拉伸
+        r_stretched = stretch_band(r_data, pmin, pmax)
+        g_stretched = stretch_band(g_data, pmin, pmax)
+        b_stretched = stretch_band(b_data, pmin, pmax)
+        
+        # 组合RGB
+        rgb = np.stack([r_stretched, g_stretched, b_stretched], axis=-1)
+        
+        # 保存或返回
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+            plt.imsave(save_path, rgb)
+            print(f"✅ RGB图像已保存到: {save_path}")
+        
         return rgb
-
-
-def tif2mat(tif_path, mat_path, var_name='data'):
-    """将TIFF文件转换为MAT文件"""
-    with rasterio.open(tif_path) as src:
-        data = src.read()  # (bands, height, width)
     
-    # 转换为 (height, width, bands)
-    data = np.transpose(data, (1, 2, 0)).astype(np.float32)
+    except FileNotFoundError:
+        print(f"❌ 文件不存在: {tiff_path}")
+        return None
+    except Exception as e:
+        print(f"❌ 处理RGB图像时出错: {e}")
+        return None
 
-    
-    sio.savemat(mat_path, {var_name: data})
-    print(f"已保存: {mat_path}")
 
-def visualize_hyperspectral_cube(path, bands=None, save_path=None):
+def visualize_single_band(tiff_path, band_idx, cmap='gray', downsample=4,
+                          pmin=2, pmax=98, save_path=None):
     """
-    使用spectral库绘制高光谱立方体
+    可视化单个波段
     
     Parameters:
     -----------
-    path : str
+    tiff_path : str
+        TIFF文件路径
+    band_idx : int
+        波段索引（1-based）
+    cmap : str
+        matplotlib色带名称
+    downsample : int
+        降采样因子
+    pmin, pmax : float
+        拉伸的百分位数
+    save_path : str
+        保存PNG的路径
+    
+    Returns:
+    --------
+    band_normalized : numpy.ndarray
+        归一化后的波段数据
+    """
+    print(f"读取文件: {tiff_path}")
+    
+    try:
+        # 读取数据
+        data = read_tiff_data(tiff_path, downsample)
+        print(f"数据形状: {data.shape}")
+        
+        # 提取指定波段
+        if band_idx > data.shape[0] or band_idx < 1:
+            raise ValueError(f"波段索引 {band_idx} 超出范围 [1, {data.shape[0]}]")
+        
+        band = data[band_idx - 1]
+        
+        # 拉伸
+        band_normalized = stretch_band(band, pmin, pmax)
+        
+        # 保存
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+            plt.imsave(save_path, band_normalized, cmap=cmap)
+            print(f"✅ 单波段图像已保存到: {save_path}")
+        
+        return band_normalized
+    
+    except FileNotFoundError:
+        print(f"❌ 文件不存在: {tiff_path}")
+        return None
+    except Exception as e:
+        print(f"❌ 处理单波段图像时出错: {e}")
+        return None
+
+
+def visualize_multiple_bands(tiff_path, bands=None, cmaps=None, downsample=4,
+                            pmin=2, pmax=98, save_path=None):
+    """
+    可视化多个波段，横向排列显示
+    
+    Parameters:
+    -----------
+    tiff_path : str
         TIFF文件路径
     bands : list
-        RGB波段，默认[29, 19, 9]
+        要显示的波段索引列表（1-based）
+    cmaps : list
+        色带列表，长度与bands相同
+    downsample : int
+        降采样因子
+    pmin, pmax : float
+        拉伸的百分位数
     save_path : str
-        未使用（spectral的view_cube是交互式的）
+        保存PNG的路径
+    
+    Returns:
+    --------
+    fig : matplotlib.figure.Figure
+        图像对象
     """
     if bands is None:
-        bands = [29, 19, 9]
+        bands = [1, 2, 3]
     
-    # 转换TIFF为MAT
-    mat_path = 'temp_cube.mat'
-    tif2mat(path, mat_path, var_name='hsi_data')
+    if cmaps is None:
+        cmaps = ['gray'] * len(bands)
+    elif len(cmaps) < len(bands):
+        cmaps.extend(['gray'] * (len(bands) - len(cmaps)))
     
-    # 加载MAT数据
-    data = sio.loadmat(mat_path)['hsi_data']
+    print(f"读取文件: {tiff_path}")
     
-    # 显示立方体
-    spectral.settings.WX_GL_DEPTH_SIZE = 100
-    view_cube(data, bands=bands)
+    try:
+        # 读取数据
+        data = read_tiff_data(tiff_path, downsample)
+        print(f"数据形状: {data.shape}")
+        
+        # 创建图像
+        fig, axes = plt.subplots(1, len(bands), figsize=(5*len(bands), 5))
+        if len(bands) == 1:
+            axes = [axes]
+        
+        for ax, band_idx, cmap in zip(axes, bands, cmaps):
+            if band_idx > data.shape[0] or band_idx < 1:
+                print(f"⚠ 波段索引 {band_idx} 超出范围，跳过")
+                ax.axis('off')
+                continue
+            
+            band = data[band_idx - 1]
+            band_normalized = stretch_band(band, pmin, pmax)
+            
+            ax.imshow(band_normalized, cmap=cmap)
+            ax.set_title(f'Band {band_idx}')
+            ax.axis('off')
+        
+        plt.tight_layout()
+        
+        # 保存
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+            plt.savefig(save_path, dpi=150, bbox_inches='tight')
+            print(f"✅ 多波段图像已保存到: {save_path}")
+            plt.close()
+        else:
+            plt.show()
+        
+        return fig
     
-    # 清理临时文件
-    os.remove(mat_path)
+    except FileNotFoundError:
+        print(f"❌ 文件不存在: {tiff_path}")
+        return None
+    except Exception as e:
+        print(f"❌ 处理多波段图像时出错: {e}")
+        return None
+
+
+def process_modality_pair(hsi_path, msi_path, sar_path, output_dir, file_name, 
+                          downsample=4):
+    """
+    处理一组HSI/MSI/SAR数据并生成可视化
+    
+    Parameters:
+    -----------
+    hsi_path : str
+        高光谱图像路径
+    msi_path : str
+        多光谱图像路径
+    sar_path : str
+        SAR图像路径
+    output_dir : str
+        输出目录
+    file_name : str
+        输出文件名前缀
+    downsample : int
+        降采样因子
+    """
+    # 创建输出目录
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 处理HSI数据 - 生成伪彩色图像（使用前3个波段）
+    if os.path.exists(hsi_path):
+        print(f"\n处理HSI: {os.path.basename(hsi_path)}")
+        # 尝试读取并显示前3个波段
+        try:
+            data = read_tiff_data(hsi_path, downsample)
+            n_bands = data.shape[0]
+            
+            # 如果波段数足够，生成RGB
+            if n_bands >= 3:
+                extract_rgb(
+                    hsi_path, 1, 2, 3,
+                    downsample=downsample,
+                    save_path=os.path.join(output_dir, f'{file_name}_hsi_rgb.png')
+                )
+            
+            # 如果波段数更多，生成近红外伪彩色
+            if n_bands >= 4:
+                extract_rgb(
+                    hsi_path, 4, 3, 2,
+                    downsample=downsample,
+                    save_path=os.path.join(output_dir, f'{file_name}_hsi_nirgb.png')
+                )
+            
+            # 显示所有波段的概览（如果波段数不多）
+            if n_bands <= 10:
+                bands_to_show = list(range(1, n_bands + 1))
+                visualize_multiple_bands(
+                    hsi_path,
+                    bands=bands_to_show,
+                    cmaps=['viridis'] * n_bands,
+                    downsample=downsample,
+                    save_path=os.path.join(output_dir, f'{file_name}_hsi_all_bands.png')
+                )
+        except Exception as e:
+            print(f"❌ HSI处理失败: {e}")
+    else:
+        print(f"⚠ HSI文件不存在: {hsi_path}")
+    
+    # 处理MSI数据
+    if os.path.exists(msi_path):
+        print(f"\n处理MSI: {os.path.basename(msi_path)}")
+        try:
+            data = read_tiff_data(msi_path, downsample)
+            n_bands = data.shape[0]
+            
+            # 自然彩色（RGB）
+            if n_bands >= 3:
+                extract_rgb(
+                    msi_path, 3, 2, 1,
+                    downsample=downsample,
+                    save_path=os.path.join(output_dir, f'{file_name}_msi_rgb.png')
+                )
+            
+            # 近红外假彩色
+            if n_bands >= 4:
+                extract_rgb(
+                    msi_path, 4, 2, 1,
+                    downsample=downsample,
+                    save_path=os.path.join(output_dir, f'{file_name}_msi_nirgb.png')
+                )
+            
+            # 彩色红外
+            if n_bands >= 4:
+                extract_rgb(
+                    msi_path, 4, 3, 2,
+                    downsample=downsample,
+                    save_path=os.path.join(output_dir, f'{file_name}_msi_cir.png')
+                )
+                
+        except Exception as e:
+            print(f"❌ MSI处理失败: {e}")
+    else:
+        print(f"⚠ MSI文件不存在: {msi_path}")
+    
+    # 处理SAR数据 - 分别显示两个极化通道
+    if os.path.exists(sar_path):
+        print(f"\n处理SAR: {os.path.basename(sar_path)}")
+        try:
+            data = read_tiff_data(sar_path, downsample)
+            n_bands = data.shape[0]
+            
+            # 显示前两个波段
+            for i in range(min(2, n_bands)):
+                visualize_single_band(
+                    sar_path,
+                    band_idx=i+1,
+                    cmap='gray',
+                    downsample=downsample,
+                    pmin=2, pmax=98,
+                    save_path=os.path.join(output_dir, f'{file_name}_sar_band{i+1}.png')
+                )
+            
+            # 如果正好有2个波段，创建双极化伪彩色合成
+            if n_bands == 2:
+                extract_rgb(
+                    sar_path, 1, 2, 1,
+                    downsample=downsample,
+                    pmin=2, pmax=98,
+                    save_path=os.path.join(output_dir, f'{file_name}_sar_dualpol.png')
+                )
+                
+        except Exception as e:
+            print(f"❌ SAR处理失败: {e}")
+    else:
+        print(f"⚠ SAR文件不存在: {sar_path}")
+
+
+def parse_band_list(s):
+    """
+    解析波段列表字符串
+    
+    Examples:
+    ---------
+    '1,2,3' -> [1, 2, 3]
+    '1-3,5' -> [1, 2, 3, 5]
+    """
+    if not s:
+        return None
+    if isinstance(s, list):
+        return s
+    
+    parts = []
+    for token in s.split(','):
+        token = token.strip()
+        if '-' in token:
+            try:
+                a, b = token.split('-', 1)
+                parts.extend(list(range(int(a), int(b) + 1)))
+            except:
+                print(f"⚠ 无法解析范围: {token}")
+        else:
+            try:
+                parts.append(int(token))
+            except:
+                print(f"⚠ 无法解析数字: {token}")
+    
+    return parts if parts else None
 
 
 def parse_cmap_list(s):
-    """解析色带列表"""
+    """解析色带列表字符串"""
     if not s:
         return []
     if isinstance(s, list):
         return s
     return [c.strip() for c in s.split(',') if c.strip()]
 
-def parse_band_list(s):
-    """解析波段列表"""
-    if not s:
-        return None
-    if isinstance(s, list):
-        return s
-    parts = []
-    for token in s.split(','):
-        token = token.strip()
-        if '-' in token:
-            a, b = token.split('-', 1)
-            parts.extend(list(range(int(a), int(b)+1)))
-        else:
-            parts.append(int(token))
-    return parts
 
-if __name__ == '__main__':
-    # 命令行参数解析
-    parser = argparse.ArgumentParser(description='可视化TIFF波段，支持不同色带和保存')
-    parser.add_argument('tiff', nargs='?', help='多波段TIFF文件路径')
-    parser.add_argument('--cmaps', type=str, default='viridis,plasma,gray', 
-                       help='色带列表，逗号分隔 (例如: viridis,gray,plasma)')
-    parser.add_argument('--bands', type=str, default='1,2,3', 
-                       help='要显示的波段 (1-based). 例如: "1,2,3" 或 "1-3"')
-    parser.add_argument('--downsample', type=int, default=4, 
-                       help='降采样因子 (1=不降采样)')
-    parser.add_argument('--pmin', type=float, default=2.0, 
-                       help='自动缩放的下百分位数')
-    parser.add_argument('--pmax', type=float, default=98.0, 
-                       help='自动缩放的上百分位数')
-    parser.add_argument('--save', type=str, default=None, 
-                       help='保存PNG文件路径')
-    parser.add_argument('--cube', action='store_true', 
-                       help='启用高光谱立方体可视化')
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(
+        description='多模态遥感数据可视化工具',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+使用示例:
+  # 提取RGB图像（自然彩色）
+  python vis_tool.py image.tif --mode rgb --rgb-bands 3,2,1 --save output.png
+  
+  # 提取RGB图像（近红外假彩色）
+  python vis_tool.py image.tif --mode rgb --rgb-bands 4,3,2 --save nirgb.png
+  
+  # 显示单个波段
+  python vis_tool.py image.tif --mode single --band 1 --cmap gray --save band1.png
+  
+  # 显示多个波段
+  python vis_tool.py image.tif --mode multi --bands 1,2,3 --cmaps gray,viridis,plasma
+  
+  # 批量处理模式（不提供tiff参数）
+  python vis_tool.py
+        '''
+    )
+    
+    parser.add_argument('tiff', nargs='?', help='TIFF文件路径')
+    
+    parser.add_argument('--mode', 
+                       choices=['rgb', 'single', 'multi', 'batch'],
+                       default='rgb',
+                       help='可视化模式 (默认: rgb)')
+    
+    parser.add_argument('--rgb-bands', type=str, default='1,2,3',
+                       help='RGB模式下的波段索引，逗号分隔 (默认: 1,2,3)')
+    
+    parser.add_argument('--band', type=int, default=1,
+                       help='单波段模式下的波段索引 (默认: 1)')
+    
+    parser.add_argument('--bands', type=str, default=None,
+                       help='多波段模式下的波段列表，如: 1,2,3 或 1-5')
+    
+    parser.add_argument('--cmaps', type=str, default='gray',
+                       help='色带列表，逗号分隔 (默认: gray)')
+    
+    parser.add_argument('--downsample', type=int, default=4,
+                       help='降采样因子，1为不降采样 (默认: 4)')
+    
+    parser.add_argument('--pmin', type=float, default=2.0,
+                       help='拉伸的最小百分位数 (默认: 2)')
+    
+    parser.add_argument('--pmax', type=float, default=98.0,
+                       help='拉伸的最大百分位数 (默认: 98)')
+    
+    parser.add_argument('--save', type=str, default=None,
+                       help='保存输出图像的路径')
+    
+    parser.add_argument('--data-dir', type=str, 
+                       default='/scrinvme/huilin/bdd/cp_data/C2Seg/src/C2Seg_BW/train',
+                       help='批量处理模式的数据根目录')
+    
+    parser.add_argument('--output-dir', type=str, default='vis',
+                       help='输出目录 (默认: vis)')
     
     args = parser.parse_args()
     
-    # 如果提供了tiff参数，使用命令行模式
+    # 单文件处理模式
     if args.tiff:
-        cmaps = parse_cmap_list(args.cmaps)
-        bands = parse_band_list(args.bands)
+        if not os.path.exists(args.tiff):
+            print(f"❌ 文件不存在: {args.tiff}")
+            return
         
-        if args.cube:
-            # 高光谱立方体可视化
-            visualize_hyperspectral_cube(
-                args.tiff, 
-                bands=bands, 
-                downsample=max(1, args.downsample),
-                save_path=args.save
-            )
-        else:
-            # 标准波段可视化
-            show_tiff_bands(
-                args.tiff, 
-                cmaps=cmaps, 
-                bands=bands, 
-                downsample=max(1, args.downsample),
-                pmin=args.pmin, 
-                pmax=args.pmax,
-                save_path=args.save
-            )
+        if args.mode == 'rgb':
+            bands = parse_band_list(args.rgb_bands)
+            if len(bands) != 3:
+                print(f"❌ RGB模式需要3个波段，但提供了{len(bands)}个: {bands}")
+                return
+            extract_rgb(args.tiff, *bands,
+                       downsample=max(1, args.downsample),
+                       pmin=args.pmin, pmax=args.pmax,
+                       save_path=args.save)
+        
+        elif args.mode == 'single':
+            visualize_single_band(args.tiff, args.band,
+                                 cmap=args.cmaps.split(',')[0].strip(),
+                                 downsample=max(1, args.downsample),
+                                 pmin=args.pmin, pmax=args.pmax,
+                                 save_path=args.save)
+        
+        elif args.mode == 'multi':
+            bands = parse_band_list(args.bands) if args.bands else [1, 2, 3]
+            cmaps = parse_cmap_list(args.cmaps)
+            visualize_multiple_bands(args.tiff, bands=bands, cmaps=cmaps,
+                                    downsample=max(1, args.downsample),
+                                    pmin=args.pmin, pmax=args.pmax,
+                                    save_path=args.save)
+    
+    # 批量处理模式
     else:
-        # 示例：直接处理数据文件夹
-        root_dir = r'/scrinvme/huilin/bdd/cp_data/C2Seg/src/C2Seg_BW/train'
+        root_dir = args.data_dir
+        output_dir = args.output_dir
+        
+        if not os.path.exists(root_dir):
+            print(f"❌ 数据根目录不存在: {root_dir}")
+            print("请使用 --data-dir 指定正确的目录，或提供单个TIFF文件路径")
+            return
+        
         hsi_dir = os.path.join(root_dir, 'hsi')
         msi_dir = os.path.join(root_dir, 'msi')
         sar_dir = os.path.join(root_dir, 'sar')
-        label_dir = os.path.join(root_dir, 'label')
-        output_dir = 'vis'
-        os.makedirs(output_dir, exist_ok=True)
-        if os.path.exists(hsi_dir):
-            file_list = os.listdir(hsi_dir)
-            if file_list:
-                file_name = file_list[0]
-                print(f"处理文件: {file_name}")
-                
-                # 高光谱数据处理
-                hsi_path = os.path.join(hsi_dir, file_name)
-                save_cube_path = os.path.join(output_dir, f'{file_name}_hsi_cube.png')
-                visualize_hyperspectral_cube(
-                    hsi_path,
-                    save_path=save_cube_path
+        
+        # 检查HSI目录
+        if not os.path.exists(hsi_dir):
+            print(f"❌ HSI目录不存在: {hsi_dir}")
+            return
+        
+        file_list = [f for f in os.listdir(hsi_dir) 
+                    if f.endswith(('.tif', '.tiff', '.TIF', '.TIFF'))][:1]
+        
+        if not file_list:
+            print(f"❌ HSI目录中没有TIFF文件: {hsi_dir}")
+            return
+        
+        print(f"找到 {len(file_list)} 个文件")
+        print(f"输出目录: {output_dir}")
+        
+        # 处理每个文件
+        for idx, file_name in enumerate(file_list, 1):
+            print(f"\n{'='*60}")
+            print(f"处理文件 {idx}/{len(file_list)}: {file_name}")
+            print(f"{'='*60}")
+            
+            hsi_path = os.path.join(hsi_dir, file_name)
+            msi_path = os.path.join(msi_dir, file_name) if os.path.exists(msi_dir) else None
+            sar_path = os.path.join(sar_dir, file_name) if os.path.exists(sar_dir) else None
+            
+            # 检查MSI和SAR目录中的对应文件
+            if msi_path and not os.path.exists(msi_path):
+                print(f"⚠ MSI文件不存在: {msi_path}")
+                msi_path = None
+            
+            if sar_path and not os.path.exists(sar_path):
+                print(f"⚠ SAR文件不存在: {sar_path}")
+                sar_path = None
+            
+            # 生成输出文件名前缀
+            name_prefix = os.path.splitext(file_name)[0]
+            
+            # 处理
+            if msi_path and sar_path:
+                process_modality_pair(
+                    hsi_path, msi_path, sar_path,
+                    output_dir, name_prefix,
+                    downsample=max(1, args.downsample)
                 )
-
-                # msi数据处理（示例：显示前3个波段）
-                msi_path = os.path.join(msi_dir, file_name)
-                save_bands_path = os.path.join(output_dir, f'{file_name}_msi_rgb.png')
-                extract_rgb(
-                    msi_path, 3,2,1,
-                    save_path=save_bands_path
+            elif msi_path:
+                process_modality_pair(
+                    hsi_path, msi_path, None,
+                    output_dir, name_prefix,
+                    downsample=max(1, args.downsample)
                 )
-                save_bands_path = os.path.join(output_dir, f'{file_name}_msi_nirgb.png')
-                extract_rgb(
-                    msi_path, 4,2,1,
-                    save_path=save_bands_path
+            elif sar_path:
+                process_modality_pair(
+                    hsi_path, None, sar_path,
+                    output_dir, name_prefix,
+                    downsample=max(1, args.downsample)
                 )
-
-                # sar数据处理（示例：显示单波段）
-                sar_path = os.path.join(sar_dir, file_name)
-                save_sar_path = os.path.join(output_dir, f'{file_name}_sar1.png')
-                show_tiff_bands(
-                    sar_path,
-                    cmaps=['gray'],
-                    bands=[1],
-                    save_path=save_sar_path
-                )
-                save_sar_path = os.path.join(output_dir, f'{file_name}_sar2.png')
-                show_tiff_bands(
-                    sar_path,
-                    cmaps=['gray'],
-                    bands=[2],
-                    save_path=save_sar_path
-                )
-                
-                print("可视化完成！")
             else:
-                print("HSI目录为空")
-        else:
-            print(f"目录不存在: {hsi_dir}")
+                print("⚠ 没有找到MSI或SAR文件，仅处理HSI")
+                process_modality_pair(
+                    hsi_path, None, None,
+                    output_dir, name_prefix,
+                    downsample=max(1, args.downsample)
+                )
+        
+        print(f"\n{'='*60}")
+        print(f"✅ 批量处理完成！输出保存在: {output_dir}")
+        print(f"{'='*60}")
+
+
+if __name__ == '__main__':
+    main()
