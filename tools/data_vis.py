@@ -6,6 +6,7 @@ from rasterio.enums import Resampling
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
 import warnings
+import skimage.io
 
 # 忽略警告
 warnings.filterwarnings('ignore')
@@ -275,6 +276,63 @@ def visualize_multiple_bands(tiff_path, bands=None, cmaps=None, downsample=4,
         print(f"❌ 处理多波段图像时出错: {e}")
         return None
 
+def tif_label_to_color(tif_path, save_path, colormap=None):
+    """
+    读取单波段TIFF标签图像，映射为彩色图像并保存
+    
+    Parameters:
+    -----------
+    tif_path : str
+        标签TIFF文件路径（单波段，每个像素值为类别）
+    save_path : str
+        输出PNG图像路径
+    colormap : dict or None
+        颜色映射字典，格式 {label_value: (R, G, B)}
+        如果为None，使用默认颜色映射
+    
+    Returns:
+    --------
+    colored_label : numpy.ndarray
+        彩色标签图像 (H, W, 3)
+    """
+    
+    # 读取TIFF标签
+    label = skimage.io.imread(tif_path)
+    
+    print(f"标签形状: {label.shape}")
+    print(f"标签唯一值: {np.unique(label)}")
+    
+    # 默认颜色映射
+    if colormap is None:
+        colormap = {
+            0: (0, 0, 0),           # 背景 - 黑色
+            1: (255, 0, 0),         # 类别1 - 红色
+            2: (0, 255, 0),         # 类别2 - 绿色
+            3: (0, 0, 255),         # 类别3 - 蓝色
+            4: (255, 255, 0),       # 类别4 - 黄色
+            5: (255, 0, 255),       # 类别5 - 品红
+            6: (0, 255, 255),       # 类别6 - 青色
+            7: (128, 0, 0),         # 类别7 - 深红
+            8: (0, 128, 0),         # 类别8 - 深绿
+            9: (0, 0, 128),         # 类别9 - 深蓝
+            10: (128, 128, 0),      # 类别10 - 橄榄
+        }
+    
+    # 创建彩色图像
+    h, w = label.shape
+    colored_label = np.zeros((h, w, 3), dtype=np.uint8)
+    
+    # 应用颜色映射
+    for label_value, color in colormap.items():
+        mask = (label == label_value)
+        colored_label[mask] = color
+    
+    # 保存图像
+    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+    skimage.io.imsave(save_path, colored_label)
+    print(f"✅ 彩色标签图像已保存到: {save_path}")
+    
+    return colored_label
 
 def process_modality_pair(hsi_path, msi_path, sar_path, output_dir, file_name, 
                           downsample=4):
@@ -504,7 +562,7 @@ def main():
                        help='保存输出图像的路径')
     
     parser.add_argument('--data-dir', type=str, 
-                       default='/scrinvme/huilin/bdd/cp_data/C2Seg/src/C2Seg_BW/train',
+                       default=None,
                        help='批量处理模式的数据根目录')
     
     parser.add_argument('--output-dir', type=str, default='vis',
@@ -556,6 +614,7 @@ def main():
         hsi_dir = os.path.join(root_dir, 'hsi')
         msi_dir = os.path.join(root_dir, 'msi')
         sar_dir = os.path.join(root_dir, 'sar')
+        label_dir = os.path.join(root_dir, 'label')
         
         # 检查HSI目录
         if not os.path.exists(hsi_dir):
@@ -581,6 +640,7 @@ def main():
             hsi_path = os.path.join(hsi_dir, file_name)
             msi_path = os.path.join(msi_dir, file_name) if os.path.exists(msi_dir) else None
             sar_path = os.path.join(sar_dir, file_name) if os.path.exists(sar_dir) else None
+            label_path = os.path.join(label_dir, file_name) if os.path.exists(label_dir) else None
             
             # 检查MSI和SAR目录中的对应文件
             if msi_path and not os.path.exists(msi_path):
@@ -620,7 +680,14 @@ def main():
                     output_dir, name_prefix,
                     downsample=max(1, args.downsample)
                 )
-        
+            
+            # 处理标签
+            if label_path:
+                tif_label_to_color(
+                    label_path,
+                    os.path.join(output_dir, f'{name_prefix}_label.png')
+                )
+            
         print(f"\n{'='*60}")
         print(f"✅ 批量处理完成！输出保存在: {output_dir}")
         print(f"{'='*60}")

@@ -168,17 +168,16 @@ def view_cube_only(img_path, bands=None, downsample=4):
     print(f"数据形状: {data.shape}")
     print(f"显示波段: {valid_bands}")
     
-    # 设置OpenGL
+    # 设置OpenGL和白色背景（必须在view_cube之前设置）
     settings.WX_GL_DEPTH_SIZE = 16
     
     # 创建应用并显示
     app = wx.App()
-    view_cube(data, bands=valid_bands)
+    view_cube(data, bands=valid_bands, background=(1, 1, 1))  # 直接在view_cube中设置背景色
     app.MainLoop()
 
-
 if __name__ == '__main__':
-   root_dir = r'/scrinvme/huilin/bdd/cp_data/C2Seg/src/C2Seg_BW/train/hsi'
+   root_dir = None
    data_name = os.listdir(root_dir)[0]
    data_path = os.path.join(root_dir, data_name)
    save_path = os.path.join(root_dir, data_name.replace('.mat', '_cube.png').replace('.tif', '_cube.png'))
