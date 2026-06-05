@@ -114,6 +114,52 @@ class CX_Uper_3B(nn.Layer):
 
         return [out]
 
+@manager.MODELS.add_component
+class CX_Uper_4B_v0(nn.Layer):
+    def __init__(self, 
+                    in_channels, 
+                    num_classes, 
+                    backb, 
+                    hsi_chs=242, 
+                    dropout_rate=0.0,
+                    ):
+        super(CX_Uper_4B, self).__init__()
+        if backb == 'convnext_tiny':
+            self.backbone0 = convnext.convnext_tiny()
+            self.backbone1 = convnext.convnext_tiny()
+            self.backbone2 = convnext.convnext_tiny(in_chans=2)
+            self.backbone3 = convnext.convnext_tiny(in_chans=hsi_chs)
+        elif backb == 'convnext_small':
+            self.backbone0 = convnext.convnext_small()
+            self.backbone1 = convnext.convnext_small()
+            self.backbone2 = convnext.convnext_small(in_chans=2)
+            self.backbone3 = convnext.convnext_small(in_chans=hsi_chs)
+        else:
+            self.backbone0 = convnext.convnext_base()
+            self.backbone1 = convnext.convnext_base()
+            self.backbone2 = convnext.convnext_base(in_chans=2)
+            self.backbone3 = convnext.convnext_base(in_chans=hsi_chs)
+        
+        self.decode_head4b = UPerHead_4B(self.backbone1.dims[:3], num_classes=num_classes)
+        self.drop = nn.Dropout2D(dropout_rate)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2, f3 in zip(fs0, fs1, fs2, fs3):
+            f = self.drop(paddle.concat([f0, f1, f2, f3], axis=1))
+            fs_diff.append(f)
+        y = self.decode_head4b(fs_diff)
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
 
 @manager.MODELS.add_component
 class CX_Uper_4B(nn.Layer):
@@ -427,4 +473,44 @@ class UPerHead_3B(nn.Layer):
         output = self.conv_seg(self.dropout(output))
         return output
 
+class UPerHead_4B(nn.Layer):
+    """Unified Perceptual Parsing for Scene Understanding
+    https://arxiv.org/abs/1807.10221
+    scales: Pooling scales used in PPM module applied on the last feature
+    """
+    def __init__(self, in_channels, channel=128, num_classes: int = 19, scales=(1, 2, 3, 6)):
+        super().__init__()
+        in_channels = [ch*4 for ch in in_channels]
+        # PPM Module
+        self.ppm = PPM(in_channels[-1], channel, scales)
+
+        # FPN Module
+        self.fpn_in = nn.LayerList()
+        self.fpn_out = nn.LayerList()
+
+        for in_ch in in_channels[:-1]: # skip the top layer
+            self.fpn_in.append(ConvModule(in_ch, channel, 1))
+            self.fpn_out.append(ConvModule(channel, channel, 3, 1, 1))
+
+        self.bottleneck = ConvModule(len(in_channels)*channel, channel, 3, 1, 1)
+        self.dropout = nn.Dropout2D(0.1)
+        self.conv_seg = nn.Conv2D(channel, num_classes, 1)
+
+
+    def forward(self, features: Tuple[Tensor, Tensor, Tensor, Tensor]) -> Tensor:
+        f = self.ppm(features[-1])
+        fpn_features = [f]
+
+        for i in reversed(range(len(features)-1)):
+            feature = self.fpn_in[i](features[i])
+            f = feature + F.interpolate(f, size=feature.shape[-2:], mode='bilinear', align_corners=False)
+            fpn_features.append(self.fpn_out[i](f))
+
+        fpn_features.reverse()
+        for i in range(1, len(features)):
+            fpn_features[i] = F.interpolate(fpn_features[i], size=fpn_features[0].shape[-2:], mode='bilinear', align_corners=False)
+ 
+        output = self.bottleneck(paddle.concat(fpn_features, axis=1))
+        output = self.conv_seg(self.dropout(output))
+        return output
 # endregion
