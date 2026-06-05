@@ -111,6 +111,12 @@ def parse_args():
         'Data format that specifies the layout of input. It can be "NCHW" or "NHWC". Default: "NCHW".',
         type=str,
         default='NCHW')
+    parser.add_argument(
+        '--log_dir',
+        dest='log_dir',
+        help='The directory for saving evaluation logs',
+        type=str,
+        default='./log')
 
     return parser.parse_args()
 
@@ -143,6 +149,10 @@ def main(args):
     paddle.set_device(place)
     if not args.cfg:
         raise RuntimeError('No configuration file specified.')
+
+    log_path = logger.setup_file_logger(args.log_dir, args.cfg)
+    if log_path:
+        logger.info("Log file: {}".format(log_path))
 
     cfg = Config(args.cfg)
     # Only support for the DeepLabv3+ model

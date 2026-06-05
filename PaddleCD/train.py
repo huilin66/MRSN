@@ -114,6 +114,12 @@ def parse_args():
         'Data format that specifies the layout of input. It can be "NCHW" or "NHWC". Default: "NCHW".',
         type=str,
         default='NCHW')
+    parser.add_argument(
+        '--log_dir',
+        dest='log_dir',
+        help='The directory for saving training logs',
+        type=str,
+        default='./log')
 
     return parser.parse_args()
 
@@ -124,6 +130,10 @@ def main(args):
         paddle.seed(args.seed)
         np.random.seed(args.seed)
         random.seed(args.seed)
+
+    log_path = logger.setup_file_logger(args.log_dir, args.cfg)
+    if log_path:
+        logger.info("Log file: {}".format(log_path))
 
     env_info = get_sys_env()
     info = ['{}: {}'.format(k, v) for k, v in env_info.items()]
