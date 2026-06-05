@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import warnings
 
 import numpy as np
 import time
@@ -139,11 +140,12 @@ def evaluate(model,
                 try:
                     c1, h1, w1 = im1.shape[1], im1.shape[2], im1.shape[3]
                     c2, h2, w2 = im2.shape[1], im2.shape[2], im2.shape[3]
-                    from paddleslim.analysis import flops as slim_flops
-                    flops = slim_flops(model, inputs=[[1, c1, h1, w1], [1, c2, h2, w2]])
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', message='When training, we now always track global mean and variance.')
+                        from paddleslim.analysis import flops as slim_flops
+                        flops = slim_flops(model, inputs=[[1, c1, h1, w1], [1, c2, h2, w2]])
                 except Exception:
                     try:
-                        # Fallback: wrap model to accept single concatenated input
                         class _FlopsWrapper(paddle.nn.Layer):
                             def __init__(self, model, c1, c2):
                                 super().__init__()
@@ -154,7 +156,9 @@ def evaluate(model,
                                 return self.model(x[:, :self.c1], x[:, self.c1:])
 
                         wrapper = _FlopsWrapper(model, c1, c2)
-                        flops = paddle.flops(wrapper, [1, c1 + c2, h1, w1])
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', message='When training, we now always track global mean and variance.')
+                            flops = paddle.flops(wrapper, [1, c1 + c2, h1, w1])
                     except Exception:
                         flops = None
 
