@@ -61,6 +61,11 @@ def evaluate(model,
         float: The accuracy of validation datasets.
     """
     model.eval()
+
+    num_params = sum(p.numel() for p in model.parameters())
+    num_trainable = sum(
+        p.numel() for p in model.parameters() if not p.stop_gradient)
+
     nranks = paddle.distributed.ParallelEnv().nranks
     local_rank = paddle.distributed.ParallelEnv().local_rank
     if nranks > 1:
@@ -91,6 +96,8 @@ def evaluate(model,
         target=total_iters, verbose=1 if nranks < 2 else 2)
     reader_cost_averager = TimeAverager()
     batch_cost_averager = TimeAverager()
+    total_time = 0.0
+    flops = None
     batch_start = time.time()
     with paddle.no_grad():
         for iter, data in enumerate(loader):
@@ -128,6 +135,14 @@ def evaluate(model,
                 eval_dataset.num_classes,
                 ignore_index=eval_dataset.ignore_index)
 
+            if flops is None:
+                try:
+                    c1, h1, w1 = im1.shape[1], im1.shape[2], im1.shape[3]
+                    c2, h2, w2 = im2.shape[1], im2.shape[2], im2.shape[3]
+                    flops = paddle.flops(model, [1, c1, h1, w1, 1, c2, h2, w2])
+                except Exception:
+                    flops = None
+
             # Gather from all ranks
             if nranks > 1:
                 intersect_area_list = []
@@ -158,6 +173,7 @@ def evaluate(model,
                 time.time() - batch_start, num_samples=len(label))
             batch_cost = batch_cost_averager.get_average()
             reader_cost = reader_cost_averager.get_average()
+            total_time += (batch_cost - reader_cost)
 
             if local_rank == 0 and print_detail:
                 progbar_val.update(iter + 1, [('batch_cost', batch_cost),
@@ -174,8 +190,13 @@ def evaluate(model,
     kappa = metrics.kappa(intersect_area_all, pred_area_all, label_area_all)
     if print_detail:
         logger.info(
-            "[EVAL] #Images: {} f1: {:.4f}, mIoU: {:.4f} Acc: {:.4f} Kappa: {:.4f} ".format(
+            "[EVAL] #Images: {} F1: {:.4f}, mIoU: {:.4f} Acc: {:.4f} Kappa: {:.4f} ".format(
                 len(eval_dataset), f1, miou, acc, kappa))
+        fps = len(eval_dataset) / total_time if total_time > 0 else 0
+        flops_str = "{:.2f}G".format(flops / 1e9) if flops is not None else "N/A"
+        logger.info(
+            "[EVAL] Params: {:.2f}M  Trainable: {:.2f}M  FLOPs: {}  FPS: {:.2f}".format(
+                num_params / 1e6, num_trainable / 1e6, flops_str, fps))
         logger.info("[EVAL] Class IoU: \n" + str(np.round(class_iou, 4)))
         logger.info("[EVAL] Class Acc: \n" + str(np.round(class_acc, 4)))
         logger.info("[EVAL] Class F1: \n" + str(np.round(class_f1, 4)))
