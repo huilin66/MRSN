@@ -98,7 +98,7 @@ def evaluate(model,
     reader_cost_averager = TimeAverager()
     batch_cost_averager = TimeAverager()
     total_time = 0.0
-    flops = None
+    input_shape = None
     batch_start = time.time()
     with paddle.no_grad():
         for iter, data in enumerate(loader):
@@ -136,31 +136,10 @@ def evaluate(model,
                 eval_dataset.num_classes,
                 ignore_index=eval_dataset.ignore_index)
 
-            if flops is None:
-                try:
-                    c1, h1, w1 = im1.shape[1], im1.shape[2], im1.shape[3]
-                    c2, h2, w2 = im2.shape[1], im2.shape[2], im2.shape[3]
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings('ignore', message='When training, we now always track global mean and variance.')
-                        from paddleslim.analysis import flops as slim_flops
-                        flops = slim_flops(model, inputs=[[1, c1, h1, w1], [1, c2, h2, w2]])
-                except Exception:
-                    try:
-                        class _FlopsWrapper(paddle.nn.Layer):
-                            def __init__(self, model, c1, c2):
-                                super().__init__()
-                                self.model = model
-                                self.c1 = c1
-                                self.c2 = c2
-                            def forward(self, x):
-                                return self.model(x[:, :self.c1], x[:, self.c1:])
-
-                        wrapper = _FlopsWrapper(model, c1, c2)
-                        with warnings.catch_warnings():
-                            warnings.filterwarnings('ignore', message='When training, we now always track global mean and variance.')
-                            flops = paddle.flops(wrapper, [1, c1 + c2, h1, w1])
-                    except Exception:
-                        flops = None
+            if input_shape is None:
+                c1, h1, w1 = im1.shape[1], im1.shape[2], im1.shape[3]
+                c2, h2, w2 = im2.shape[1], im2.shape[2], im2.shape[3]
+                input_shape = (c1, h1, w1, c2, h2, w2)
 
             # Gather from all ranks
             if nranks > 1:
@@ -201,6 +180,38 @@ def evaluate(model,
             batch_cost_averager.reset()
             batch_start = time.time()
 
+
+    # Compute FLOPs after all inference to avoid perturbing BN stats
+    flops = None
+    if input_shape is not None:
+        try:
+            c1, h1, w1, c2, h2, w2 = input_shape
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore',
+                    message='When training, we now always track global mean and variance.'
+                )
+                from paddleslim.analysis import flops as slim_flops
+                flops = slim_flops(model, inputs=[[1, c1, h1, w1], [1, c2, h2, w2]])
+        except Exception:
+            try:
+                class _FlopsWrapper(paddle.nn.Layer):
+                    def __init__(self, model, c1, c2):
+                        super().__init__()
+                        self.model = model
+                        self.c1 = c1
+                        self.c2 = c2
+                    def forward(self, x):
+                        return self.model(x[:, :self.c1], x[:, self.c1:])
+                wrapper = _FlopsWrapper(model, c1, c2)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        'ignore',
+                        message='When training, we now always track global mean and variance.'
+                    )
+                    flops = paddle.flops(wrapper, [1, c1 + c2, h1, w1])
+            except Exception:
+                flops = None
 
     class_iou, miou = metrics.mean_iou(intersect_area_all, pred_area_all,
                                        label_area_all)
