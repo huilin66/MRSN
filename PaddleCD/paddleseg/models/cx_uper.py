@@ -123,7 +123,7 @@ class CX_Uper_4B_v0(nn.Layer):
                     hsi_chs=242, 
                     dropout_rate=0.0,
                     ):
-        super(CX_Uper_4B, self).__init__()
+        super(CX_Uper_4B_v0, self).__init__()
         if backb == 'convnext_tiny':
             self.backbone0 = convnext.convnext_tiny()
             self.backbone1 = convnext.convnext_tiny()
