@@ -119,7 +119,7 @@ def parse_args():
         dest='log_dir',
         help='The directory for saving training logs',
         type=str,
-        default='./log')
+        default='./train/log')
 
     return parser.parse_args()
 
