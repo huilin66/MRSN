@@ -263,6 +263,52 @@ class CX_Uper_4B_CA_FLASH(CX_Uper_4B):
 
         return [out]
 
+@manager.MODELS.add_component
+class CX_Uper_4B_v0_CA_FLASH(CX_Uper_4B_v0):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_v0_CA_FLASH, self).__init__(**kwargs)
+
+        self.cas1 = []
+        self.cas2 = []
+        for dim in self.backbone1.dims[:3]:
+            ca1 = FlashMultiHeadAttention(dim*3, 8, kdim=dim, vdim=dim)
+            ca2 = FlashMultiHeadAttention(dim, 8, kdim=dim*3, vdim=dim*3)
+            self.cas1.append(ca1)
+            self.cas2.append(ca2)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        fs_diff_ca = []
+        for ca1, ca2, f1, f2 in zip(self.cas1, self.cas2, fs_diff, fs3):
+            shape1, shape2 = f1.shape, f2.shape
+            # print(f1.shape, f2.shape)
+            f1 = f1.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))
+            f2 = f2.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))
+            # print(f1.shape, f2.shape)
+            # print(ca1, ca2)
+            ff1 = ca1(f1, f2, f2)
+            ff1 = ff1.transpose((0, 2, 1)).reshape((shape1[0], shape1[1], shape1[2], shape1[3]))
+            ff2 = ca2(f2, f1, f1)
+            ff2 = ff2.transpose((0, 2, 1)).reshape((shape2[0], shape2[1], shape2[2], shape2[3]))
+            # print(ff1.shape, ff2.shape)
+            f = self.drop(paddle.concat([ff1, ff2], axis=1))
+            fs_diff_ca.append(f)
+        y = self.decode_head4b(fs_diff_ca)
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
 
 # region tools
 
