@@ -218,8 +218,8 @@ class CX_Uper_4B_CA_FLASH(CX_Uper_4B):
     def __init__(self, **kwargs):
         super(CX_Uper_4B_CA_FLASH, self).__init__(**kwargs)
 
-        self.cas1 = []
-        self.cas2 = []
+        self.cas1 = nn.LayerList()
+        self.cas2 = nn.LayerList()
         for dim in self.backbone1.dims[:3]:
             ca1 = FlashMultiHeadAttention(dim*3, 8, kdim=dim, vdim=dim)
             ca2 = FlashMultiHeadAttention(dim, 8, kdim=dim*3, vdim=dim*3)
