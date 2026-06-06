@@ -237,8 +237,8 @@ class CX_Uper_4B2H(nn.Layer):
             self.backbone3 = convnext.convnext_base(in_chans=hsi_chs)
         
 
-        self.decode_head2b = UPerHead_3B(self.backbone1.dims[:3], num_classes=num_classes)
-        self.decode_head3b = UPerHead(self.backbone1.dims[:3], num_classes=num_classes)
+        self.decode_head3b = UPerHead_3B(self.backbone1.dims[:3], num_classes=num_classes)
+        self.decode_head1b = UPerHead(self.backbone1.dims[:3], num_classes=num_classes)
         self.drop = nn.Dropout2D(dropout_rate)
 
     def forward(self, t1, t2):
@@ -254,8 +254,8 @@ class CX_Uper_4B2H(nn.Layer):
         for f0, f1, f2 in zip(fs0, fs1, fs2):
             f = self.drop(paddle.concat([f0, f1, f2], axis=1))
             fs_diff.append(f)
-        y2 = self.decode_head2b(fs_diff)
-        y3 = self.decode_head3b(fs3)
+        y2 = self.decode_head3b(fs_diff)
+        y3 = self.decode_head1b(fs3)
         y = y2+y3
         out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
 
@@ -293,20 +293,16 @@ class CX_Uper_4B2H_CA_FLASH(CX_Uper_4B2H):
         fs3_ca = []
         for ca1, ca2, f1, f2 in zip(self.cas1, self.cas2, fs_diff, fs3):
             shape1, shape2 = f1.shape, f2.shape
-            # print(f1.shape, f2.shape)
             f1 = f1.reshape((shape1[0], shape1[1], -1)).transpose((0, 2, 1))
             f2 = f2.reshape((shape2[0], shape2[1], -1)).transpose((0, 2, 1))
-            # print(f1.shape, f2.shape)
-            # print(ca1, ca2)
             ff1 = ca1(f1, f2, f2)
             ff1 = ff1.transpose((0, 2, 1)).reshape((shape1[0], shape1[1], shape1[2], shape1[3]))
             ff2 = ca2(f2, f1, f1)
             ff2 = ff2.transpose((0, 2, 1)).reshape((shape2[0], shape2[1], shape2[2], shape2[3]))
-            # print(ff1.shape, ff2.shape)
             fs_diff_ca.append(ff1)
             fs3_ca.append(ff2)
-        y2 = self.decode_head2b(fs_diff)
-        y3 = self.decode_head3b(fs3)
+        y2 = self.decode_head3b(fs_diff_ca)
+        y3 = self.decode_head1b(fs3_ca)
         y = y2+y3
         out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
 
