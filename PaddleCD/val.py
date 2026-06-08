@@ -116,7 +116,7 @@ def parse_args():
         dest='log_dir',
         help='The directory for saving evaluation logs',
         type=str,
-        default='./val/log')
+        default='./log/val')
 
     return parser.parse_args()
 
