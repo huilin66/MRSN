@@ -191,6 +191,24 @@ def main(args):
 
     evaluate(model, val_dataset, batch_size=args.batch_size, num_workers=args.num_workers, **test_config)
 
+    if place == 'gpu':
+        import pynvml
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        allocated = paddle.device.cuda.memory_allocated() / 1024**2
+        max_allocated = paddle.device.cuda.max_memory_allocated() / 1024**2
+        reserved = paddle.device.cuda.memory_reserved() / 1024**2
+        max_reserved = paddle.device.cuda.max_memory_reserved() / 1024**2
+        msg = (
+            f"[GPU Memory] Used: {info.used / 1024**2:.0f} MiB / {info.total / 1024**2:.0f} MiB | "
+            f"Paddle allocated: {allocated:.0f} MiB | peak: {max_allocated:.0f} MiB | "
+            f"Paddle reserved: {reserved:.0f} MiB | peak: {max_reserved:.0f} MiB"
+        )
+        logger.info(msg)
+        print(msg)
+        pynvml.nvmlShutdown()
+
 
 if __name__ == '__main__':
     args = parse_args()
