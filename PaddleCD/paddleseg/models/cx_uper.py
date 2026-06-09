@@ -209,7 +209,6 @@ class CX_Uper_4B_CA_FLASH(CX_Uper_4B):
 
         return [out]
 
-
 @manager.MODELS.add_component
 class CX_Uper_4B_CA_FLASH_V1(CX_Uper_4B):
     def __init__(self, **kwargs):
@@ -452,6 +451,65 @@ class CX_Uper_4B_CA_FLASH_V4(CX_Uper_4B):
 
         return [out]
 
+
+# ============================================================
+# V5: Spatial Attention (f0+f1+f2) + Channel Attention (fs3)
+# RGB fused features → spatial attention (where to look)
+# HSI features        → channel attention (which bands matter)
+# Residual + Learnable Gate, alpha=0 初始化
+# ============================================================
+@manager.MODELS.add_component
+class CX_Uper_4B_CA_FLASH_V5(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA_FLASH_V5, self).__init__(**kwargs)
+
+        self.spatial_attn = nn.LayerList()
+        self.channel_attn = nn.LayerList()
+        for dim in self.backbone1.dims[:3]:
+            # Spatial attention on fused RGB+DSM+NIR (dim*3 channels)
+            self.spatial_attn.append(SpatialAttention())
+            # Channel attention on HSI (dim channels)
+            self.channel_attn.append(ChannelAttention(dim))
+
+        self.alpha1 = self.create_parameter(
+            shape=[3],
+            default_initializer=nn.initializer.Constant(0.0))
+        self.alpha2 = self.create_parameter(
+            shape=[3],
+            default_initializer=nn.initializer.Constant(0.0))
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        fs_diff = []
+        for f0, f1, f2 in zip(fs0, fs1, fs2):
+            f = self.drop(paddle.concat([f0, f1, f2], axis=1))
+            fs_diff.append(f)
+
+        fs_diff_ca = []
+        for idx, (sp_attn, ch_attn, f1, f2) in enumerate(
+                zip(self.spatial_attn, self.channel_attn, fs_diff, fs3)):
+            f1_ori = f1  # [B, dim*3, H, W] — fused RGB+DSM+NIR
+            f2_ori = f2  # [B, dim,   H, W] — HSI
+            # Spatial attention: learns "where" in the fused RGB features
+            sp_out = sp_attn(f1)
+            # Channel attention: learns "which bands" in HSI features
+            ch_out = ch_attn(f2)
+            # Residual + Learnable Gate
+            ff1 = f1_ori + self.alpha1[idx] * sp_out
+            ff2 = f2_ori + self.alpha2[idx] * ch_out
+            f = self.drop(paddle.concat([ff1, ff2], axis=1))
+            fs_diff_ca.append(f)
+        y = self.decode_head4b(fs_diff_ca)
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
 
 @manager.MODELS.add_component
 class CX_Uper_4B2H(nn.Layer):
@@ -764,6 +822,45 @@ class PosEnhance(nn.Layer):
 
     def forward(self, x):
         return x + self.dwconv(x)
+
+
+class SpatialAttention(nn.Layer):
+    """Spatial attention: generates H*W attention map via avg+max pooling + conv.
+
+    Input:  [B, C, H, W]
+    Output: [B, C, H, W]  (same shape, spatially reweighted)
+    """
+    def __init__(self, kernel_size=7):
+        super().__init__()
+        self.conv = nn.Conv2D(2, 1, kernel_size, padding=kernel_size // 2, bias_attr=False)
+
+    def forward(self, x):
+        avg_out = x.mean(axis=1, keepdim=True)   # [B, 1, H, W]
+        max_out = x.max(axis=1, keepdim=True)    # [B, 1, H, W]
+        attn = F.sigmoid(self.conv(paddle.concat([avg_out, max_out], axis=1)))  # [B, 1, H, W]
+        return x * attn
+
+
+class ChannelAttention(nn.Layer):
+    """Channel attention (SE-style): reweights channels via GAP + FC + sigmoid.
+
+    Input:  [B, C, H, W]
+    Output: [B, C, H, W]  (same shape, channel-reweighted)
+    """
+    def __init__(self, channels, reduction=16):
+        super().__init__()
+        hidden = max(channels // reduction, 8)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, channels),
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.shape
+        y = x.mean(axis=[2, 3])                  # [B, C]
+        y = self.fc(y).unsqueeze(-1).unsqueeze(-1)  # [B, C, 1, 1]
+        return x * F.sigmoid(y)
 
 class FlashMultiHeadAttention(nn.Layer):
     def __init__(self, embed_dim, num_heads, kdim=None, vdim=None, dropout=0.0, causal=False):
