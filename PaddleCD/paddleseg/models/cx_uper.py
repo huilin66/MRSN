@@ -2,6 +2,7 @@ import paddle
 from paddle import nn, Tensor
 from paddle.nn import functional as F
 from typing import Tuple
+from paddle.vision.ops import DeformConv2D
 
 from paddleseg.cvlibs import manager
 from paddleseg.models.backbones import convnext
@@ -452,12 +453,7 @@ class CX_Uper_4B_CA_FLASH_V4(CX_Uper_4B):
         return [out]
 
 
-# ============================================================
-# V5: Spatial Attention (f0+f1+f2) + Channel Attention (fs3)
-# RGB fused features → spatial attention (where to look)
-# HSI features        → channel attention (which bands matter)
-# Residual + Learnable Gate, alpha=0 初始化
-# ============================================================
+
 @manager.MODELS.add_component
 class CX_Uper_4B_CA_FLASH_V5(CX_Uper_4B):
     def __init__(self, **kwargs):
@@ -510,6 +506,47 @@ class CX_Uper_4B_CA_FLASH_V5(CX_Uper_4B):
         out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
 
         return [out]
+
+
+@manager.MODELS.add_component
+class CX_Uper_4B_CA_FLASH_V6(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_CA_FLASH_V6, self).__init__(**kwargs)
+
+        self.spatial_attn_rgb = nn.LayerList()
+        self.spatial_attn_nirgb = nn.LayerList()
+        self.spatial_attn_sar = nn.LayerList()
+        self.channel_attn_hsi = nn.LayerList()
+        for dim in self.backbone3.dims[:3]:
+            self.spatial_attn_rgb.append(SpatialAttention())
+            self.spatial_attn_nirgb.append(SpatialAttention())
+            self.spatial_attn_sar.append(SpatialAttention())
+            self.channel_attn_hsi.append(ChannelAttention(dim))
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+
+        fs_diff_ca = []
+        for i in range(3):
+            f0_ori, f1_ori, f2_ori, f3_ori = fs0[i], fs1[i], fs2[i], fs3[i]
+            f0 = self.spatial_attn_rgb[i](f0_ori)+f0_ori
+            f1 = self.spatial_attn_nirgb[i](f1_ori)+f1_ori
+            f2 = self.spatial_attn_sar[i](f2_ori)+f2_ori
+            f3 = self.channel_attn_hsi[i](f3_ori)+f3_ori
+            f = self.drop(paddle.concat([f0, f1, f2, f3], axis=1))
+            fs_diff_ca.append(f)
+        y = self.decode_head4b(fs_diff_ca)
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
 
 @manager.MODELS.add_component
 class CX_Uper_4B2H(nn.Layer):
