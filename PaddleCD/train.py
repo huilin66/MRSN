@@ -119,9 +119,17 @@ def parse_args():
         dest='log_dir',
         help='The directory for saving training logs',
         type=str,
-        default='./log/train')
+        default=None)
+    parser.add_argument(
+        '--pre_test',
+        dest='pre_test',
+        help='Use pre_test mode (changes default log_dir to ./log/pre_test)',
+        action='store_true')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.log_dir is None:
+        args.log_dir = './log/pre_test' if args.pre_test else './log/train'
+    return args
 
 
 def main(args):
