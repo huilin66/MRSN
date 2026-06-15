@@ -549,6 +549,36 @@ class CX_Uper_4B_CA_FLASH_V6(CX_Uper_4B):
 
 
 @manager.MODELS.add_component
+class CX_Uper_4B_PMRG(CX_Uper_4B):
+    def __init__(self, **kwargs):
+        super(CX_Uper_4B_PMRG, self).__init__(**kwargs)
+
+        self.fusion_blocks = nn.LayerList()
+        for dim in self.backbone1.dims[:3]:
+            self.fusion_blocks.append(PixelModalityReliabilityGate(dim, num_modalities=4))
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+
+        fs_fused = []
+        for fusion, f0, f1, f2, f3 in zip(self.fusion_blocks, fs0, fs1, fs2, fs3):
+            f, _ = fusion([f0, f1, f2, f3])
+            fs_fused.append(self.drop(f))
+
+        y = self.decode_head4b(fs_fused)
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+
+@manager.MODELS.add_component
 class CX_Uper_4B2H(nn.Layer):
     def __init__(self, 
                     in_channels, 
@@ -859,6 +889,56 @@ class PosEnhance(nn.Layer):
 
     def forward(self, x):
         return x + self.dwconv(x)
+
+
+class PixelModalityReliabilityGate(nn.Layer):
+    """Pixel-level reliability gating for multi-modal feature fusion.
+
+    The module predicts one spatial reliability map per modality and uses it to
+    add a small residual enhancement to each modality feature. The output keeps
+    the same channel layout as direct concat, so UPerHead_4B can be reused.
+    """
+
+    def __init__(self, channels, num_modalities=4, reduction=4, temperature=1.0):
+        super().__init__()
+        hidden = max(channels // reduction, 16)
+        self.temperature = temperature
+        self.gate = nn.Sequential(
+            nn.Conv2D(channels * num_modalities, hidden, 1, bias_attr=False),
+            nn.BatchNorm2D(hidden),
+            nn.ReLU(True),
+            nn.Conv2D(hidden, hidden, 3, padding=1, groups=hidden, bias_attr=False),
+            nn.BatchNorm2D(hidden),
+            nn.ReLU(True),
+            nn.Conv2D(hidden, num_modalities, 1)
+        )
+        self.enhance = nn.LayerList([
+            nn.Sequential(
+                nn.Conv2D(channels, channels, 3, padding=1, groups=channels, bias_attr=False),
+                nn.BatchNorm2D(channels),
+                nn.ReLU(True),
+                nn.Conv2D(channels, channels, 1, bias_attr=False),
+                nn.BatchNorm2D(channels),
+                nn.ReLU(True)
+            )
+            for _ in range(num_modalities)
+        ])
+        self.alpha = self.create_parameter(
+            shape=[num_modalities],
+            default_initializer=nn.initializer.Constant(0.1))
+
+    def forward(self, feats):
+        x = paddle.concat(feats, axis=1)
+        gate_logits = self.gate(x) / self.temperature
+        gates = F.softmax(gate_logits, axis=1)
+
+        outs = []
+        for i, feat in enumerate(feats):
+            gate = gates[:, i:i + 1, :, :]
+            alpha = self.alpha[i].reshape([1, 1, 1, 1])
+            outs.append(feat + alpha * gate * self.enhance[i](feat))
+
+        return paddle.concat(outs, axis=1), gates
 
 
 class SpatialAttention(nn.Layer):
