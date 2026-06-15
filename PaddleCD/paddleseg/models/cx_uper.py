@@ -8,7 +8,6 @@ from paddleseg.cvlibs import manager
 from paddleseg.models.backbones import convnext
 
 
-
 @manager.MODELS.add_component
 class CX_Uper(nn.Layer):
     def __init__(self,
@@ -158,6 +157,40 @@ class CX_Uper_4B(nn.Layer):
             f = self.drop(paddle.concat([f0, f1, f2, f3], axis=1))
             fs_diff.append(f)
         y = self.decode_head4b(fs_diff)
+        out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
+
+        return [out]
+
+
+@manager.MODELS.add_component
+class CX_Uper_4B_MPPM(CX_Uper_4B):
+    def __init__(self,
+                 in_channels,
+                 num_classes,
+                 backb,
+                 hsi_chs=242,
+                 dropout_rate=0.0):
+        super(CX_Uper_4B_MPPM, self).__init__(
+            in_channels=in_channels,
+            num_classes=num_classes,
+            backb=backb,
+            hsi_chs=hsi_chs,
+            dropout_rate=dropout_rate)
+
+        self.decode_head4b = UPerHead_4B_MPPM(
+            self.backbone1.dims[:3],
+            num_classes=num_classes)
+
+    def forward(self, t1, t2):
+        t3 = t2
+        t0 = paddle.concat([t1[:, :2, ...], t1[:, 3:4, ...]], axis=1)
+        t2 = t1[:, 4:, ...]
+        t1 = t1[:, :3, ...]
+        fs0 = self.backbone0(t0)
+        fs1 = self.backbone1(t1)
+        fs2 = self.backbone2(t2)
+        fs3 = self.backbone3(t3)
+        y = self.decode_head4b([fs0, fs1, fs2, fs3])
         out = F.interpolate(y, size=paddle.shape(t1)[2:], mode='bilinear', align_corners=True)
 
         return [out]
@@ -868,6 +901,65 @@ class UPerHead_4B(nn.Layer):
         for i in range(1, len(features)):
             fpn_features[i] = F.interpolate(fpn_features[i], size=fpn_features[0].shape[-2:], mode='bilinear', align_corners=False)
  
+        output = self.bottleneck(paddle.concat(fpn_features, axis=1))
+        output = self.conv_seg(self.dropout(output))
+        return output
+
+class UPerHead_4B_MPPM(nn.Layer):
+    """Modality-aware UPerHead.
+
+    Each modality keeps three backbone stages. The last stage of each modality
+    is processed by its own PPM, while lower stages are fused by FPN.
+    """
+    def __init__(self,
+                 in_channels,
+                 channel=128,
+                 num_classes: int = 19,
+                 scales=(1, 2, 3, 6),
+                 num_modalities=4):
+        super().__init__()
+        self.num_modalities = num_modalities
+
+        self.ppms = nn.LayerList([
+            PPM(in_channels[-1], channel, scales)
+            for _ in range(num_modalities)
+        ])
+        self.ppm_fuse = ConvModule(channel * num_modalities, channel, 1)
+
+        self.fpn_in = nn.LayerList()
+        self.fpn_out = nn.LayerList()
+
+        for in_ch in in_channels[:-1]:
+            self.fpn_in.append(ConvModule(in_ch * num_modalities, channel, 1))
+            self.fpn_out.append(ConvModule(channel, channel, 3, 1, 1))
+
+        self.bottleneck = ConvModule(len(in_channels) * channel, channel, 3, 1, 1)
+        self.dropout = nn.Dropout2D(0.1)
+        self.conv_seg = nn.Conv2D(channel, num_classes, 1)
+
+    def forward(self, features) -> Tensor:
+        ppm_features = []
+        for ppm, modality_features in zip(self.ppms, features):
+            ppm_features.append(ppm(modality_features[-1]))
+
+        f = self.ppm_fuse(paddle.concat(ppm_features, axis=1))
+        fpn_features = [f]
+        num_stages = len(features[0])
+
+        for i in reversed(range(num_stages - 1)):
+            stage_feature = paddle.concat([modality_features[i] for modality_features in features], axis=1)
+            feature = self.fpn_in[i](stage_feature)
+            f = feature + F.interpolate(f, size=feature.shape[-2:], mode='bilinear', align_corners=False)
+            fpn_features.append(self.fpn_out[i](f))
+
+        fpn_features.reverse()
+        for i in range(1, num_stages):
+            fpn_features[i] = F.interpolate(
+                fpn_features[i],
+                size=fpn_features[0].shape[-2:],
+                mode='bilinear',
+                align_corners=False)
+
         output = self.bottleneck(paddle.concat(fpn_features, axis=1))
         output = self.conv_seg(self.dropout(output))
         return output
