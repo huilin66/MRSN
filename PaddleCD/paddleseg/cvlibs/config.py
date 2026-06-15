@@ -392,4 +392,20 @@ class Config(object):
         return isinstance(item, dict) and 'type' in item
 
     def __str__(self) -> str:
-        return yaml.dump(self.dic)
+        return yaml.dump(self.dic, Dumper=_FlowStyleDumper, default_flow_style=False, sort_keys=False, width=200)
+
+
+class _FlowStyleDumper(yaml.Dumper):
+    """YAML Dumper that uses flow style for lists of primitives (e.g. mean/std)."""
+
+
+def _flow_list_representer(dumper, data):
+    """Represent list: flow style for primitives, block style for dicts."""
+    if data and isinstance(data[0], dict):
+        return dumper.represent_sequence(
+            'tag:yaml.org,2002:seq', data, flow_style=False)
+    return dumper.represent_sequence(
+        'tag:yaml.org,2002:seq', data, flow_style=True)
+
+
+_FlowStyleDumper.add_representer(list, _flow_list_representer)
