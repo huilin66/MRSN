@@ -26,6 +26,65 @@ from paddleseg.core import infer
 np.set_printoptions(suppress=True)
 
 
+def _resolve_class_names(num_classes, class_names=None):
+    if class_names is None:
+        return ["class_{}".format(i) for i in range(num_classes)]
+
+    if isinstance(class_names, str):
+        if os.path.exists(class_names):
+            with open(class_names, 'r') as f:
+                class_names = [line.strip() for line in f if line.strip()]
+        else:
+            class_names = [name.strip() for name in class_names.split(',') if name.strip()]
+    elif len(class_names) == 1 and os.path.exists(class_names[0]):
+        with open(class_names[0], 'r') as f:
+            class_names = [line.strip() for line in f if line.strip()]
+
+    if len(class_names) != num_classes:
+        logger.warning(
+            "The number of class names ({}) does not match num_classes ({}). "
+            "Fallback to class indexes.".format(len(class_names), num_classes))
+        return ["class_{}".format(i) for i in range(num_classes)]
+
+    return list(class_names)
+
+
+def _format_class_metrics_table(class_iou,
+                                class_f1,
+                                class_acc,
+                                intersect_area,
+                                pred_area,
+                                label_area,
+                                class_names=None):
+    num_classes = len(class_iou)
+    names = _resolve_class_names(num_classes, class_names)
+    rows = []
+    for idx in range(num_classes):
+        rows.append([
+            str(idx),
+            names[idx],
+            "{:.4f}".format(float(class_iou[idx])),
+            "{:.4f}".format(float(class_f1[idx])),
+            "{:.4f}".format(float(class_acc[idx])),
+            str(int(intersect_area[idx])),
+            str(int(pred_area[idx])),
+            str(int(label_area[idx])),
+        ])
+
+    headers = ["Class", "Name", "IoU", "F1", "Acc", "Intersect", "Pred", "Label"]
+    widths = [
+        max(len(headers[col]), max(len(row[col]) for row in rows))
+        for col in range(len(headers))
+    ]
+    header_line = " | ".join(headers[col].ljust(widths[col]) for col in range(len(headers)))
+    sep_line = "-+-".join("-" * width for width in widths)
+    row_lines = [
+        " | ".join(row[col].ljust(widths[col]) for col in range(len(headers)))
+        for row in rows
+    ]
+    return "\n".join([header_line, sep_line] + row_lines)
+
+
 def evaluate(model,
              eval_dataset,
              aug_eval=False,
@@ -38,7 +97,9 @@ def evaluate(model,
              stride=None,
              crop_size=None,
              num_workers=0,
-             print_detail=True):
+             print_detail=True,
+             class_table=False,
+             class_names=None):
     """
     Launch evalution.
 
@@ -56,6 +117,8 @@ def evaluate(model,
             It should be provided when `is_slide` is True.
         num_workers (int, optional): Num workers for data loader. Default: 0.
         print_detail (bool, optional): Whether to print detailed information about the evaluation process. Default: True.
+        class_table (bool, optional): Whether to print per-class metrics as a table. Default: False.
+        class_names (list[str]|str, optional): Class names or a class-name file. Default: None.
 
     Returns:
         float: The mIoU of validation datasets.
@@ -230,4 +293,13 @@ def evaluate(model,
         logger.info("[EVAL] Class IoU: \n" + str(np.round(class_iou, 4)))
         logger.info("[EVAL] Class Acc: \n" + str(np.round(class_acc, 4)))
         logger.info("[EVAL] Class F1: \n" + str(np.round(class_f1, 4)))
+        if class_table:
+            logger.info("[EVAL] Per-class metrics:\n" + _format_class_metrics_table(
+                class_iou,
+                class_f1,
+                class_acc,
+                intersect_area_all.numpy(),
+                pred_area_all.numpy(),
+                label_area_all.numpy(),
+                class_names))
     return miou, acc, class_iou, class_acc, kappa

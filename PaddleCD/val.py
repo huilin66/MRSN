@@ -117,6 +117,17 @@ def parse_args():
         help='The directory for saving evaluation logs',
         type=str,
         default='./log/val')
+    parser.add_argument(
+        '--class_table',
+        dest='class_table',
+        help='Whether to print per-class IoU/F1 as a table',
+        action='store_true')
+    parser.add_argument(
+        '--class_names',
+        dest='class_names',
+        nargs='+',
+        help='Optional class names, or a path to a txt file with one class name per line',
+        default=None)
 
     return parser.parse_args()
 
@@ -189,7 +200,14 @@ def main(args):
     test_config = get_test_config(cfg, args)
     config_check(cfg, val_dataset=val_dataset)
 
-    evaluate(model, val_dataset, batch_size=args.batch_size, num_workers=args.num_workers, **test_config)
+    evaluate(
+        model,
+        val_dataset,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        class_table=args.class_table,
+        class_names=args.class_names,
+        **test_config)
 
     if place == 'gpu':
         import pynvml
