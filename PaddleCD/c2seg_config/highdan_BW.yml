@@ -1,0 +1,10 @@
+_base_: 'C2Seg_BW.yml'
+
+model:
+  type: HighDAN
+  in_channels: 122
+  num_classes: 14
+  hsi_chs: 116
+  msi_chs: 4
+  sar_chs: 2
+  pretrained: /home/huilin/.paddleseg/pretrained_model/hrnet_w48_ssld/model.pdparams

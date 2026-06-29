@@ -48,4 +48,5 @@ from .dsamnet import DSAMNet
 from .bit import *
 from .dsfin import *
 from .bidsf import *
-from .cx_uper import*
+from .cx_uper import *
+from .highdan import *
