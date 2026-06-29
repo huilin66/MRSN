@@ -6,6 +6,7 @@ Example:
         --model_path output/iter_40000/model.pdparams \
         --batch_size 8 \
         --output tools/per_image_miou.csv \
+        --output_dir tools/per_image_results \
         --pred_gray_dir tools/per_image_preds/gray \
         --pred_color_dir tools/per_image_preds/color
 """
@@ -39,6 +40,15 @@ def parse_args():
         "--output",
         default="tools/per_image_miou.csv",
         help="Output CSV path. Default: tools/per_image_miou.csv",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default=None,
+        help=(
+            "Directory for all outputs. If set, CSV is saved as "
+            "<output_dir>/<output filename>, and predictions are saved under "
+            "<output_dir>/<gray folder name> and <output_dir>/<color folder name>."
+        ),
     )
     parser.add_argument(
         "--pred_gray_dir",
@@ -120,6 +130,20 @@ def parse_args():
         help="Input data format. Same constraint as PaddleCD/val.py.",
     )
     return parser.parse_args()
+
+
+def resolve_output_paths(args):
+    output_path = Path(args.output)
+    gray_dir = Path(args.pred_gray_dir)
+    color_dir = Path(args.pred_color_dir)
+
+    if args.output_dir is not None:
+        output_dir = Path(args.output_dir)
+        output_path = output_dir / output_path.name
+        gray_dir = output_dir / gray_dir.name
+        color_dir = output_dir / color_dir.name
+
+    return output_path, gray_dir, color_dir
 
 
 def choose_device(requested):
@@ -258,6 +282,7 @@ def write_rows(output_path, rows, num_classes):
 
 def main():
     args = parse_args()
+    output_path, pred_gray_dir, pred_color_dir = resolve_output_paths(args)
 
     global np
     global paddle
@@ -337,8 +362,8 @@ def main():
                         sample_index,
                         image1_path,
                         label_path,
-                        args.pred_gray_dir,
-                        args.pred_color_dir,
+                        pred_gray_dir,
+                        pred_color_dir,
                     )
 
                 row = {
@@ -369,11 +394,11 @@ def main():
                 )
             )
 
-    write_rows(args.output, rows, eval_dataset.num_classes)
-    print("Saved per-image mIoU to {}".format(os.path.abspath(args.output)))
+    write_rows(output_path, rows, eval_dataset.num_classes)
+    print("Saved per-image mIoU to {}".format(os.path.abspath(output_path)))
     if not args.no_save_pred:
-        print("Saved gray predictions to {}".format(os.path.abspath(args.pred_gray_dir)))
-        print("Saved color predictions to {}".format(os.path.abspath(args.pred_color_dir)))
+        print("Saved gray predictions to {}".format(os.path.abspath(pred_gray_dir)))
+        print("Saved color predictions to {}".format(os.path.abspath(pred_color_dir)))
 
 
 if __name__ == "__main__":
