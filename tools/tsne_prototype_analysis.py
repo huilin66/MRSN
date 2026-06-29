@@ -17,6 +17,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -110,6 +111,14 @@ def parse_args():
         nargs="+",
         default=None,
         help="Optional class names, or one txt file with one class name per line.",
+    )
+    parser.add_argument(
+        "--class_file",
+        default=None,
+        help=(
+            "Class name txt file. Accepts lines like 'Water', '0: Water', "
+            "'0,Water', or '0 Water'."
+        ),
     )
     parser.add_argument(
         "--device",
@@ -498,15 +507,65 @@ def run_tsne(features, args):
     return tsne.fit_transform(features)
 
 
-def resolve_class_names(class_names, num_classes):
-    if class_names is None:
-        return ["class_{}".format(i) for i in range(num_classes)]
-    if len(class_names) == 1 and Path(class_names[0]).exists():
-        with open(class_names[0], "r", encoding="utf-8") as f:
-            class_names = [line.strip() for line in f if line.strip()]
-    if len(class_names) != num_classes:
-        return ["class_{}".format(i) for i in range(num_classes)]
-    return list(class_names)
+def read_text_auto(path):
+    for encoding in ("utf-8", "utf-8-sig", "gb18030", "latin-1"):
+        try:
+            return Path(path).read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
+def load_class_names_file(path):
+    names = []
+    for raw_line in read_text_auto(path).splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        match = re.match(r"^\s*\d+\s*(?:[:;,|\t]|\s)\s*(.+?)\s*$", line)
+        if match:
+            line = match.group(1).strip()
+        names.append(line)
+    return names
+
+
+def resolve_class_names(class_names, class_file, num_classes):
+    names = ["class_{}".format(i) for i in range(num_classes)]
+
+    provided = []
+    if class_file:
+        class_path = Path(class_file)
+        if not class_path.is_file():
+            raise FileNotFoundError("Class file does not exist: {}".format(class_path))
+        provided = load_class_names_file(class_path)
+    elif class_names:
+        if len(class_names) == 1 and Path(class_names[0]).exists():
+            provided = load_class_names_file(Path(class_names[0]))
+        else:
+            provided = list(class_names)
+
+    if provided:
+        if len(provided) != num_classes:
+            print(
+                "WARNING: class names contain {} names, but num_classes is {}. "
+                "Matching class ids will be replaced; unmatched ids keep class_i names.".format(
+                    len(provided), num_classes
+                )
+            )
+        for class_id, class_name in enumerate(provided[:num_classes]):
+            names[class_id] = class_name
+
+    return names
+
+
+def apply_class_names_to_records(records, class_names):
+    for record in records:
+        class_id = int(record["class_id"])
+        record["class_name"] = (
+            class_names[class_id] if 0 <= class_id < len(class_names)
+            else "class_{}".format(class_id)
+        )
 
 
 def marker_for_index(index):
@@ -537,7 +596,7 @@ def plot_tsne(points, records, source, output_path, class_names):
                 continue
             label = None
             if len(model_names) == 1:
-                label = class_names[class_id] if class_id < len(class_names) else str(class_id)
+                label = class_names[class_id] if class_id < len(class_names) else "class_{}".format(class_id)
             elif class_id == class_ids[0]:
                 label = model_name
             plt.scatter(
@@ -558,7 +617,7 @@ def plot_tsne(points, records, source, output_path, class_names):
     else:
         class_handles = []
         for class_id in class_ids:
-            class_label = class_names[class_id] if class_id < len(class_names) else str(class_id)
+            class_label = class_names[class_id] if class_id < len(class_names) else "class_{}".format(class_id)
             class_handles.append(Line2D(
                 [0], [0], marker="o", linestyle="None", markersize=7,
                 markerfacecolor=class_to_color[class_id], markeredgecolor="none",
@@ -607,6 +666,7 @@ def write_points_csv(output_path, points, records):
         "image2_path",
         "label_path",
         "class_id",
+        "class_name",
         "pixel_count",
     ]
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -624,6 +684,7 @@ def write_points_csv(output_path, points, records):
                 "image2_path": record["image2_path"],
                 "label_path": record["label_path"],
                 "class_id": record["class_id"],
+                "class_name": record.get("class_name", "class_{}".format(record["class_id"])),
                 "pixel_count": record["pixel_count"],
             })
 
@@ -727,7 +788,8 @@ def main():
         raise RuntimeError("No prototypes were extracted. Try lowering --min_pixels.")
 
     num_classes = max(meta["num_classes"] for meta in model_meta)
-    class_names = resolve_class_names(args.class_names, num_classes)
+    class_names = resolve_class_names(args.class_names, args.class_file, num_classes)
+    apply_class_names_to_records(all_records, class_names)
 
     gt_cache = output_dir / "prototypes_gt.npz"
     pred_cache = output_dir / "prototypes_pred.npz"
@@ -749,6 +811,7 @@ def main():
         json.dump({
             "models": model_meta,
             "args": vars(args),
+            "class_names": class_names,
             "results": results,
             "prototype_counts": {
                 "gt": len(gt_records),
