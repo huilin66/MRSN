@@ -5,7 +5,9 @@ Example:
         --config PaddleCD/c2seg_config/MRSN.yml \
         --model_path output/iter_40000/model.pdparams \
         --batch_size 8 \
-        --output tools/per_image_miou.csv
+        --output tools/per_image_miou.csv \
+        --pred_gray_dir tools/per_image_preds/gray \
+        --pred_color_dir tools/per_image_preds/color
 """
 
 import argparse
@@ -37,6 +39,21 @@ def parse_args():
         "--output",
         default="tools/per_image_miou.csv",
         help="Output CSV path. Default: tools/per_image_miou.csv",
+    )
+    parser.add_argument(
+        "--pred_gray_dir",
+        default="tools/per_image_preds/gray",
+        help="Directory for gray prediction masks. Default: tools/per_image_preds/gray",
+    )
+    parser.add_argument(
+        "--pred_color_dir",
+        default="tools/per_image_preds/color",
+        help="Directory for pseudo-color prediction masks. Default: tools/per_image_preds/color",
+    )
+    parser.add_argument(
+        "--no_save_pred",
+        action="store_true",
+        help="Only export metrics CSV, do not save prediction masks.",
     )
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size.")
     parser.add_argument(
@@ -192,6 +209,27 @@ def infer_batch(model, eval_dataset, im1, im2, label, test_config):
     )
 
 
+def build_prediction_name(sample_index, image1_path, label_path):
+    source_path = label_path or image1_path
+    stem = Path(source_path).stem
+    return "{:06d}_{}.png".format(sample_index, stem)
+
+
+def save_prediction(pred, sample_index, image1_path, label_path, gray_dir, color_dir):
+    pred_mask = pred.numpy().squeeze().astype("uint8")
+    file_name = build_prediction_name(sample_index, image1_path, label_path)
+
+    gray_path = Path(gray_dir) / file_name
+    color_path = Path(color_dir) / file_name
+    gray_path.parent.mkdir(parents=True, exist_ok=True)
+    color_path.parent.mkdir(parents=True, exist_ok=True)
+
+    Image.fromarray(pred_mask).save(gray_path)
+    get_pseudo_color_map(pred_mask).convert("RGB").save(color_path)
+
+    return str(gray_path), str(color_path)
+
+
 def write_rows(output_path, rows, num_classes):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,6 +239,8 @@ def write_rows(output_path, rows, num_classes):
         "image1_path",
         "image2_path",
         "label_path",
+        "pred_gray_path",
+        "pred_color_path",
         "miou",
         "acc",
         "kappa",
@@ -227,12 +267,16 @@ def main():
     global get_sys_env
     global metrics
     global utils
+    global Image
+    global get_pseudo_color_map
 
     import numpy as np
     import paddle
+    from PIL import Image
     from paddleseg.core import infer
     from paddleseg.cvlibs import Config
     from paddleseg.utils import config_check, get_sys_env, metrics, utils
+    from paddleseg.utils.visualize import get_pseudo_color_map
 
     paddle.set_device(choose_device(args.device))
 
@@ -285,12 +329,25 @@ def main():
                     eval_dataset.num_classes,
                     eval_dataset.ignore_index,
                 )
+                pred_gray_path = ""
+                pred_color_path = ""
+                if not args.no_save_pred:
+                    pred_gray_path, pred_color_path = save_prediction(
+                        pred[i],
+                        sample_index,
+                        image1_path,
+                        label_path,
+                        args.pred_gray_dir,
+                        args.pred_color_dir,
+                    )
 
                 row = {
                     "index": sample_index,
                     "image1_path": image1_path,
                     "image2_path": image2_path,
                     "label_path": label_path,
+                    "pred_gray_path": pred_gray_path,
+                    "pred_color_path": pred_color_path,
                     "miou": "{:.8f}".format(item_metrics["miou"]),
                     "acc": "{:.8f}".format(item_metrics["acc"]),
                     "kappa": "{:.8f}".format(item_metrics["kappa"]),
@@ -314,6 +371,9 @@ def main():
 
     write_rows(args.output, rows, eval_dataset.num_classes)
     print("Saved per-image mIoU to {}".format(os.path.abspath(args.output)))
+    if not args.no_save_pred:
+        print("Saved gray predictions to {}".format(os.path.abspath(args.pred_gray_dir)))
+        print("Saved color predictions to {}".format(os.path.abspath(args.pred_color_dir)))
 
 
 if __name__ == "__main__":
