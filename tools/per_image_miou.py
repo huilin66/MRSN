@@ -23,6 +23,29 @@ PADDLECD_ROOT = REPO_ROOT / "PaddleCD"
 if str(PADDLECD_ROOT) not in sys.path:
     sys.path.insert(0, str(PADDLECD_ROOT))
 
+BRIGHT_COLORS = [
+    (0, 0, 0),
+    (230, 25, 75),
+    (60, 180, 75),
+    (255, 225, 25),
+    (0, 130, 200),
+    (245, 130, 48),
+    (145, 30, 180),
+    (70, 240, 240),
+    (240, 50, 230),
+    (210, 245, 60),
+    (250, 190, 190),
+    (0, 128, 128),
+    (230, 190, 255),
+    (170, 110, 40),
+    (255, 250, 200),
+    (128, 0, 0),
+    (170, 255, 195),
+    (128, 128, 0),
+    (255, 215, 180),
+    (0, 0, 128),
+]
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -239,6 +262,42 @@ def build_prediction_name(sample_index, image1_path, label_path):
     return "{:06d}_{}.png".format(sample_index, stem)
 
 
+def hsv_to_rgb_uint8(hue, saturation, value):
+    c = value * saturation
+    x = c * (1 - abs((hue / 60) % 2 - 1))
+    m = value - c
+    if hue < 60:
+        r, g, b = c, x, 0
+    elif hue < 120:
+        r, g, b = x, c, 0
+    elif hue < 180:
+        r, g, b = 0, c, x
+    elif hue < 240:
+        r, g, b = 0, x, c
+    elif hue < 300:
+        r, g, b = x, 0, c
+    else:
+        r, g, b = c, 0, x
+    return [int((r + m) * 255), int((g + m) * 255), int((b + m) * 255)]
+
+
+def bright_color_map(num_classes=256):
+    palette = []
+    for class_id in range(num_classes):
+        if class_id < len(BRIGHT_COLORS):
+            palette.extend(BRIGHT_COLORS[class_id])
+        else:
+            hue = (class_id * 47) % 360
+            palette.extend(hsv_to_rgb_uint8(hue, 0.82, 1.0))
+    return palette
+
+
+def get_bright_pseudo_color_map(pred):
+    pred_mask = Image.fromarray(pred.astype("uint8"), mode="P")
+    pred_mask.putpalette(bright_color_map(256))
+    return pred_mask
+
+
 def save_prediction(pred, sample_index, image1_path, label_path, gray_dir, color_dir):
     pred_mask = pred.numpy().squeeze().astype("uint8")
     file_name = build_prediction_name(sample_index, image1_path, label_path)
@@ -249,7 +308,7 @@ def save_prediction(pred, sample_index, image1_path, label_path, gray_dir, color
     color_path.parent.mkdir(parents=True, exist_ok=True)
 
     Image.fromarray(pred_mask).save(gray_path)
-    get_pseudo_color_map(pred_mask).convert("RGB").save(color_path)
+    get_bright_pseudo_color_map(pred_mask).convert("RGB").save(color_path)
 
     return str(gray_path), str(color_path)
 
@@ -293,7 +352,6 @@ def main():
     global metrics
     global utils
     global Image
-    global get_pseudo_color_map
 
     import numpy as np
     import paddle
@@ -301,7 +359,6 @@ def main():
     from paddleseg.core import infer
     from paddleseg.cvlibs import Config
     from paddleseg.utils import config_check, get_sys_env, metrics, utils
-    from paddleseg.utils.visualize import get_pseudo_color_map
 
     paddle.set_device(choose_device(args.device))
 

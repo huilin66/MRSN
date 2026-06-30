@@ -1,7 +1,7 @@
 train_dataset:
   type: RS_MD3B
-  dataset_root: /data/huilin/data/C2Seg_BW/train/
-  train_path:  /data/huilin/data/C2Seg_BW/train.txt
+  dataset_root: \\158.132.186.40\isds\huilin\bdd\cp_data\C2Seg\src\C2Seg_BW\train\
+  train_path:  \\158.132.186.40\isds\huilin\bdd\cp_data\C2Seg_BW\train.txt
   num_classes: 14
   transforms:
     - type: Normalize2
@@ -13,8 +13,8 @@ train_dataset:
 
 val_dataset:
   type: RS_MD3B
-  dataset_root: /data/huilin/data/C2Seg_BW/train/
-  val_path:  /data/huilin/data/C2Seg_BW/val.txt
+  dataset_root: \\158.132.186.40\isds\huilin\bdd\cp_data\C2Seg\src\C2Seg_BW\train\
+  val_path:  \\158.132.186.40\isds\huilin\bdd\cp_data\C2Seg\src\C2Seg_BW\val.txt
   num_classes: 14
   transforms:
     - type: Normalize2
