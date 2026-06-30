@@ -1,13 +1,42 @@
 *.pyc
+__pycache__/
 *.pdopt
 *.pdparams
+*.pdmodel
+*.pdiparams
+*.pdiparams.info
 
 .idea
 .idea/
+.ipynb_checkpoints/
 output/
 ana/
 log/
 vis/
+runs/
+checkpoints/
+pretrained/
+data/
+datasets/
+manuscript/
 
 .venv/
 .vscode/
+
+# LaTeX build products
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.run.xml
+*.bcf
+
+
+*.cff
