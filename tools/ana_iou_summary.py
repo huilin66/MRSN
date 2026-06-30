@@ -53,6 +53,16 @@ class ClassSummary:
 
 
 @dataclass
+class ImageSummary:
+    image_key: str
+    index: Optional[int]
+    image1_path: str
+    image2_path: str
+    label_path: str
+    miou: Optional[float]
+
+
+@dataclass
 class ModelSummary:
     model_name: str
     csv_file: str
@@ -61,6 +71,7 @@ class ModelSummary:
     miou: Optional[float] = None
     mean_image_miou: Optional[float] = None
     class_metrics: list[ClassSummary] = field(default_factory=list)
+    image_metrics: list[ImageSummary] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -113,6 +124,11 @@ def safe_int(value) -> int:
     return int(number) if number is not None else 0
 
 
+def optional_int(value) -> Optional[int]:
+    number = safe_float(value)
+    return int(number) if number is not None else None
+
+
 def collect_class_ids(fieldnames: Iterable[str]) -> list[int]:
     ids = set()
     for name in fieldnames:
@@ -157,6 +173,7 @@ def parse_per_image_csv(path: Path, class_names: list[str]) -> tuple[Optional[Mo
     label_areas = {class_id: 0 for class_id in class_ids}
     image_ious = {class_id: [] for class_id in class_ids}
     image_mious = []
+    image_metrics: list[ImageSummary] = []
 
     has_area_columns = all(
         f"class_{class_id}_intersect" in fieldnames
@@ -177,6 +194,20 @@ def parse_per_image_csv(path: Path, class_names: list[str]) -> tuple[Optional[Mo
         miou = safe_float(row.get("miou"))
         if miou is not None:
             image_mious.append(miou)
+        index = optional_int(row.get("index"))
+        image_key = str(index) if index is not None else (
+            row.get("label_path") or row.get("image1_path") or f"row_{len(image_metrics)}"
+        )
+        image_metrics.append(
+            ImageSummary(
+                image_key=image_key,
+                index=index,
+                image1_path=row.get("image1_path", ""),
+                image2_path=row.get("image2_path", ""),
+                label_path=row.get("label_path", ""),
+                miou=miou,
+            )
+        )
 
         for class_id in class_ids:
             image_iou = safe_float(row.get(f"class_{class_id}_iou"))
@@ -229,6 +260,7 @@ def parse_per_image_csv(path: Path, class_names: list[str]) -> tuple[Optional[Mo
         miou=(sum(global_ious) / len(global_ious) if global_ious else None),
         mean_image_miou=(sum(image_mious) / len(image_mious) if image_mious else None),
         class_metrics=class_metrics,
+        image_metrics=image_metrics,
     )
     summary.warnings = [issue.message for issue in issues if issue.level == "WARNING"]
     return summary, issues
@@ -309,6 +341,32 @@ def collect_canonical_classes(records: Iterable[ModelSummary]) -> list[tuple[int
         for metric in record.class_metrics:
             names.setdefault(metric.class_id, metric.class_name)
     return sorted(names.items())
+
+
+def collect_canonical_images(records: Iterable[ModelSummary]) -> list[dict[str, object]]:
+    images: dict[str, dict[str, object]] = {}
+    for record in records:
+        for image in record.image_metrics:
+            if image.image_key not in images:
+                images[image.image_key] = {
+                    "image_key": image.image_key,
+                    "index": image.index,
+                    "image1_path": image.image1_path,
+                    "image2_path": image.image2_path,
+                    "label_path": image.label_path,
+                }
+            else:
+                item = images[image.image_key]
+                item["image1_path"] = item.get("image1_path") or image.image1_path
+                item["image2_path"] = item.get("image2_path") or image.image2_path
+                item["label_path"] = item.get("label_path") or image.label_path
+    return sorted(
+        images.values(),
+        key=lambda item: (
+            item["index"] is None,
+            item["index"] if item["index"] is not None else str(item["image_key"]),
+        ),
+    )
 
 
 def safe_number(value):
@@ -445,6 +503,77 @@ def export_workbook(records: list[ModelSummary], issues: list[ParseIssue], outpu
     style_sheet(details, freeze="A2", metric_start_col=4)
     add_table(details, "PerClassDetailsTable")
 
+    summary.column_dimensions["A"].width = 34
+    summary.column_dimensions["G"].width = 70
+    details.column_dimensions["C"].width = 28
+    details.column_dimensions["K"].width = 70
+
+    canonical_images = collect_canonical_images(records)
+    image_ws = wb.create_sheet("Image mIoU")
+    image_headers = [
+        "Image Key",
+        "Index",
+        "Image1 Path",
+        "Image2 Path",
+        "Label Path",
+    ] + [record.model_name for record in records]
+    image_rows = []
+    model_image_maps = {
+        record.model_name: {image.image_key: image for image in record.image_metrics}
+        for record in records
+    }
+    for image in canonical_images:
+        image_rows.append([
+            image["image_key"],
+            image["index"],
+            image["image1_path"],
+            image["image2_path"],
+            image["label_path"],
+            *[
+                safe_number(model_image_maps[record.model_name].get(image["image_key"]).miou)
+                if image["image_key"] in model_image_maps[record.model_name] else None
+                for record in records
+            ],
+        ])
+    append_rows(image_ws, image_headers, image_rows)
+    style_sheet(image_ws, freeze="F2", metric_start_col=6)
+    add_table(image_ws, "ImageMiOUTable")
+    image_ws.column_dimensions["C"].width = 55
+    image_ws.column_dimensions["D"].width = 55
+    image_ws.column_dimensions["E"].width = 55
+
+    image_long_ws = wb.create_sheet("Image mIoU Long")
+    image_long_headers = [
+        "Model",
+        "Image Key",
+        "Index",
+        "mIoU",
+        "Image1 Path",
+        "Image2 Path",
+        "Label Path",
+        "CSV Path",
+    ]
+    image_long_rows = []
+    for record in records:
+        for image in record.image_metrics:
+            image_long_rows.append([
+                record.model_name,
+                image.image_key,
+                image.index,
+                safe_number(image.miou),
+                image.image1_path,
+                image.image2_path,
+                image.label_path,
+                record.csv_path,
+            ])
+    append_rows(image_long_ws, image_long_headers, image_long_rows)
+    style_sheet(image_long_ws, freeze="A2", metric_start_col=4)
+    add_table(image_long_ws, "ImageMiOULongTable")
+    image_long_ws.column_dimensions["E"].width = 55
+    image_long_ws.column_dimensions["F"].width = 55
+    image_long_ws.column_dimensions["G"].width = 55
+    image_long_ws.column_dimensions["H"].width = 70
+
     issue_sheet = wb.create_sheet("Parse Issues")
     issue_headers = ["Source", "Level", "Message"]
     issue_rows = [[i.source, i.level, i.message] for i in issues]
@@ -453,11 +582,6 @@ def export_workbook(records: list[ModelSummary], issues: list[ParseIssue], outpu
     append_rows(issue_sheet, issue_headers, issue_rows)
     style_sheet(issue_sheet, freeze="A2")
     add_table(issue_sheet, "ParseIssuesTable")
-
-    summary.column_dimensions["A"].width = 34
-    summary.column_dimensions["G"].width = 70
-    details.column_dimensions["C"].width = 28
-    details.column_dimensions["K"].width = 70
     issue_sheet.column_dimensions["C"].width = 80
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
