@@ -2,7 +2,7 @@
 
 ## Scope
 
-This repository contains the PaddlePaddle/PaddleSeg implementation and manuscript package for the MRSN/MBFM experiments. The C2Seg-BW dataset is not redistributed here.
+This repository contains the PaddlePaddle/PaddleSeg implementation for the MRSN/MBFM experiments. The C2Seg-BW dataset is not redistributed here.
 
 ## Environment
 
@@ -12,22 +12,28 @@ Install repository dependencies:
 pip install -r PaddleCD/requirements.txt
 ```
 
-Install the PaddlePaddle GPU package that matches your CUDA toolkit. The manuscript reports experiments on an RTX 6000 GPU with CUDA 12.6.
+Install the PaddlePaddle GPU package that matches your CUDA toolkit. The experiments used an RTX 6000 GPU with CUDA 12.6.
 
 ## Dataset Configuration
 
-Edit `PaddleCD/c2seg_config/C2Seg_BW.yml` before running:
+Create a local `.env` file in the repository root before running:
+
+```bash
+C2SEG_BW_ROOT=/path/to/C2Seg_BW/train
+```
+
+`PaddleCD/c2seg_config/C2Seg_BW.yml` reads this variable:
 
 ```yaml
 train_dataset:
-  dataset_root: /path/to/C2Seg_BW/train/
-  train_path: /path/to/C2Seg_BW/train.txt
+  dataset_root: ${C2SEG_BW_ROOT}
+  train_path: ${C2SEG_BW_ROOT}\train.txt
 val_dataset:
-  dataset_root: /path/to/C2Seg_BW/train/
-  val_path: /path/to/C2Seg_BW/val.txt
+  dataset_root: ${C2SEG_BW_ROOT}
+  val_path: ${C2SEG_BW_ROOT}\val.txt
 ```
 
-The manuscript uses 7,140 labeled 256 x 256 patches from C2Seg-BW, with 6,426 patches for training and 714 for validation. Keep the exact split files with the release if dataset rules allow it.
+The experiments use 7,140 labeled 256 x 256 patches from C2Seg-BW, with 6,426 patches for training and 714 for validation. Keep the exact split files with the release if dataset rules allow it.
 
 ## Training Protocol
 
@@ -45,14 +51,14 @@ Example:
 
 ```bash
 cd PaddleCD
-python train.py --config c2seg_config/cxup_4b_BW_PMRG_v2_loss.yml --save_dir ../output/mbfm --do_eval
+python train.py --config c2seg_config/cxup_4b_BW_PMRG_v2_lossV2.yml --save_dir ../output/cxup_4b_BW_PMRG_v2_lossV2 --do_eval
 ```
 
 ## Evaluation
 
 ```bash
 cd PaddleCD
-python val.py --config c2seg_config/cxup_4b_BW_PMRG_v2_loss.yml --model_path ../output/mbfm/best_model/model.pdparams --batch_size 1
+python val.py --config c2seg_config/cxup_4b_BW_PMRG_v2_lossV2.yml --model_path ../output/cxup_4b_BW_PMRG_v2_lossV2/best_model/model.pdparams --batch_size 1
 ```
 
 ## Reported Validation Results
@@ -69,6 +75,6 @@ python val.py --config c2seg_config/cxup_4b_BW_PMRG_v2_loss.yml --model_path ../
 
 ## Release Notes
 
-- Config files currently contain local absolute dataset paths. Treat them as templates and update paths before running.
+- Dataset paths are read from a local `.env` file. Do not commit private dataset paths.
 - The official C2Seg test labels are not public, so reported metrics are internal-validation metrics.
 - For exact reproducibility, release the train/validation split files and model checkpoints if licensing and storage constraints permit.

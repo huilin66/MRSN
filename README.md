@@ -1,8 +1,11 @@
-# MRSN
+# MRSN / MBFM
 
-Code and manuscript release package for **MRSN / MBFM**, a multimodal remote sensing semantic segmentation project built on PaddlePaddle and PaddleSeg.
+This repository provides the PaddlePaddle/PaddleSeg implementation for two multimodal remote sensing semantic segmentation works:
 
-The current manuscript title is **A Multi-Branch Fusion Model for Multimodal Remote Sensing Image Segmentation**. The proposed MBFM combines a multi-branch ConvNeXt-Tiny/UPerNet backbone, a Pixel-wise Modality Reliability Gate (PMRG), and an OHEM-enhanced mixed loss for C2Seg-BW semantic segmentation.
+- **Multimodal Remote Sensing Network (MRSN)**, WHISPERS 2023.
+- **Multi-Branch Fusion Model (MBFM)**, an extended multi-branch fusion framework with Pixel-wise Modality Reliability Gate (PMRG) and mixed loss.
+
+The code supports training, validation, prediction, and experimental analysis on the C2Seg-BW multimodal remote sensing segmentation setting.
 
 ## Repository Layout
 
@@ -11,88 +14,113 @@ PaddleCD/                 PaddleSeg-based training, validation, prediction code
 PaddleCD/c2seg_config/    Experiment configs for MRSN/MBFM variants and baselines
 tools/                    Analysis, visualization, split, and post-processing scripts
 pic/                      Repository-level architecture image
-manuscript/               Clean LaTeX manuscript package copied from source_version
-docs/                     Publication and reproducibility notes
+docs/                     Reproducibility notes
+upload/                   Release-ready model weights and train/validation logs
 ```
 
-## Main Results
+## Installation
 
-All metrics below are reported on the internal C2Seg-BW validation split described in the manuscript.
-
-| Method | mIoU | F1 | ACC | Kappa | Params (M) | FLOPs (G) | FPS |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| UPerNet / 1-branch reference | 0.8025 | 0.8878 | 0.9328 | 0.9094 | 30.01 | 31.70 | 143.93 |
-| Prior MRSN (4B2H) | 0.8659 | 0.9269 | 0.9595 | 0.9455 | 116.82 | 102.67 | 49.46 |
-| MBFM (4-branch + PMRG + ML) | 0.8694 | 0.9287 | 0.9658 | 0.9539 | 116.51 | 94.18 | 42.86 |
-
-## Environment
-
-The code is based on PaddlePaddle/PaddleSeg. A minimal dependency list is available in:
+Clone the repository and install the Python dependencies:
 
 ```bash
+git clone https://github.com/huilin66/MRSN.git
+cd MRSN
 pip install -r PaddleCD/requirements.txt
 ```
 
-Install a PaddlePaddle GPU build that matches your CUDA environment. The manuscript experiments used an RTX 6000 GPU with CUDA 12.6.
+Install a PaddlePaddle GPU build that matches your CUDA environment. The experiments used an RTX 6000 GPU with CUDA 12.6.
 
-## Data
+For quick checks, verify that PaddlePaddle can be imported:
 
-The experiments use C2Seg-BW from the 2023 IEEE WHISPERS Cross-City Semantic Segmentation Challenge. The dataset is not redistributed in this repository. Update the paths in `PaddleCD/c2seg_config/C2Seg_BW.yml` to point to your local copy:
+```bash
+python -c "import paddle; print(paddle.__version__); print(paddle.device.get_device())"
+```
+
+## Data Preparation
+
+The experiments use C2Seg-BW from the 2023 IEEE WHISPERS Cross-City Semantic Segmentation Challenge. The dataset is not redistributed in this repository.
+
+Create a local `.env` file in the repository root and define the dataset root:
+
+```bash
+C2SEG_BW_ROOT=/path/to/C2Seg_BW/train
+```
+
+`PaddleCD/c2seg_config/C2Seg_BW.yml` reads this variable:
 
 ```yaml
 train_dataset:
-  dataset_root: /path/to/C2Seg_BW/train/
-  train_path: /path/to/C2Seg_BW/train.txt
+  dataset_root: ${C2SEG_BW_ROOT}
+  train_path: ${C2SEG_BW_ROOT}\train.txt
 val_dataset:
-  dataset_root: /path/to/C2Seg_BW/train/
-  val_path: /path/to/C2Seg_BW/val.txt
+  dataset_root: ${C2SEG_BW_ROOT}
+  val_path: ${C2SEG_BW_ROOT}\val.txt
 ```
+
+The `.env` file is ignored by git so private dataset paths are not published.
 
 ## Training
 
-Example command for the full MBFM-style PMRG + mixed-loss variant:
+Run training from the repository root:
 
 ```bash
-cd PaddleCD
-python train.py --config c2seg_config/cxup_4b_BW_PMRG_v2_loss.yml --save_dir ../output/mbfm --do_eval
+python PaddleCD/train.py \
+  --config PaddleCD/c2seg_config/cxup_4b_BW_PMRG_v2_lossV2.yml \
+  --save_dir output/cxup_4b_BW_PMRG_v2_lossV2 \
+  --do_eval
 ```
 
-Other important configs include:
+You can also run the notebook workflow in `main.ipynb`; `aug.ipynb` provides additional examples for model/config path setup.
 
-| Config | Purpose |
-|---|---|
-| `c2seg_config/cxup_1b_BW.yml` | 1-branch stacked-input reference |
-| `c2seg_config/cxup_2b_BW.yml` | 2-branch partition |
-| `c2seg_config/cxup_3b_BW.yml` | 3-branch partition |
-| `c2seg_config/cxup_4b_BW.yml` | 4-branch reference |
-| `c2seg_config/cxup_4b_BW_PMRG_v2_loss.yml` | PMRG + OHEM-enhanced mixed loss |
-| `c2seg_config/MRSN.yml` | Prior 4-branch/two-head MRSN prototype |
+## Validation
 
-## Evaluation
+Run validation with a trained checkpoint:
 
 ```bash
-cd PaddleCD
-python val.py --config c2seg_config/cxup_4b_BW_PMRG_v2_loss.yml --model_path ../output/mbfm/best_model/model.pdparams --batch_size 1
+python PaddleCD/val.py \
+  --config PaddleCD/c2seg_config/cxup_4b_BW_PMRG_v2_lossV2.yml \
+  --model_path output/cxup_4b_BW_PMRG_v2_lossV2/best_model/model.pdparams \
+  --batch_size 1
 ```
 
-Additional analysis scripts for CAM, t-SNE, per-image mIoU, and summary tables are in `tools/`. See `docs/REPRODUCIBILITY.md` for a more complete release checklist.
+For notebook-style validation, refer to the command patterns in `aug.ipynb` and use the same config and checkpoint arguments shown above.
 
-## Manuscript
+Additional analysis scripts for CAM, t-SNE, per-image mIoU, and summary tables are in `tools/`. See `docs/REPRODUCIBILITY.md` for more details.
 
-The cleaned LaTeX submission package is in `manuscript/`:
+## Released Models and Logs
 
-- `main.tex`
-- `ref.bib`
-- `figures/`
-- `main.pdf`
-- `cover_letter.md`
+The `upload/` directory is organized by model. Each model folder contains:
 
-Before journal submission, review `docs/PUBLICATION_CHECKLIST.md` for unresolved publication items such as target-journal template confirmation, final citation verification, license choice, and dataset/code availability details.
+```text
+model.pdparams    Best validation checkpoint
+train.log         Training log
+val.log           Validation log
+```
+
+Download links:
+
+- Baidu Netdisk: https://pan.baidu.com/s/17bEaPhn7ICAIUG4jpm155A?pwd=a5g6, extraction code: `a5g6`
+- Google Drive: https://drive.google.com/drive/folders/1PZLc_urcnLuYBfxbmJhZkUeadLpmFYAc?usp=sharing
+
+When distributing through Google Drive or Baidu Netdisk, keep this per-model folder structure so weights and logs stay paired.
 
 ## Citation
 
-If you use this repository, please cite the project metadata in `CITATION.cff`. After the manuscript is published, update `CITATION.cff` with the final venue and DOI.
+If you use the original **Multimodal Remote Sensing Network (MRSN)** model or its released results, please cite:
+
+```bibtex
+@inproceedings{zhao2023multimodal,
+  title={Multimodal remote sensing network},
+  author={Zhao, Huilin and Chen, Chuan and Xia, Cong},
+  booktitle={2023 13th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS)},
+  pages={1--4},
+  year={2023},
+  organization={IEEE}
+}
+```
 
 ## License
 
-This repository has not yet declared a project license. Add a `LICENSE` file before public release. Because `PaddleCD` adapts PaddleSeg code, verify compatibility with the Apache License 2.0 notices retained in the source files.
+Apache License 2.0.
+
+Thanks to PaddleSeg for providing the segmentation framework used in this codebase.
