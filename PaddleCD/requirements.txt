@@ -11,4 +11,5 @@ prettytable
 scikit-image
 scikit-learn
 protobuf==3.20.3
+ipykernel
 # paddlepaddle-gpu==3.3.0

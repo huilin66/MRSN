@@ -15,6 +15,7 @@ Example:
 import argparse
 import csv
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -75,6 +76,35 @@ def parse_args():
         type=int,
         default=30,
         help="Number of selected samples for CAM when select_by is not all. Default: 30",
+    )
+    parser.add_argument(
+        "--select_file",
+        type=str,
+        default="",
+        help=(
+            "Optional sample/class list. Each line accepts "
+            "'image_id: class_id/class_name; class_id/class_name'. "
+            "When provided, --select_by/--topk are ignored."
+        ),
+    )
+    parser.add_argument(
+        "--collect_dir",
+        type=str,
+        default="",
+        help=(
+            "Collected sample directory used to map rank ids in --select_file to "
+            "validation indexes, for example ana/top20_xxx."
+        ),
+    )
+    parser.add_argument(
+        "--select_id_type",
+        choices=("auto", "index", "rank", "stem"),
+        default="auto",
+        help=(
+            "How to interpret ids in --select_file. auto maps ranks through "
+            "--collect_dir when possible, otherwise uses validation index. "
+            "Default: auto."
+        ),
     )
     parser.add_argument(
         "--rgb_bands",
@@ -159,6 +189,9 @@ def auto_find_cam_layer(model):
         "decode_head1b.bottleneck",
         "decode_head4b.ppm.bottleneck",
         "decode_head.ppm.bottleneck",
+        # UNet: use the final decoder feature before the class prediction conv.
+        "decode.up_sample_list.3.double_conv.1",
+        "decode.up_sample_list.3.double_conv.0",
     ]
     layers = dict(iter_named_sublayers(model))
     for name in candidate_names:
@@ -234,6 +267,135 @@ def select_samples(scores, select_by, topk):
     reverse = select_by == "highest_miou"
     selected = sorted(scores, key=lambda item: item["miou"], reverse=reverse)
     return selected[:topk]
+
+
+def parse_class_specs(text):
+    specs = []
+    for part in re.split(r";+", text):
+        part = part.strip()
+        if not part:
+            continue
+        match = re.match(r"^\s*(\d+)\s*(?:[/：:,]\s*)?(.*)$", part)
+        if not match:
+            raise ValueError("Could not parse class spec '{}'.".format(part))
+        class_id = int(match.group(1))
+        class_name = match.group(2).strip()
+        specs.append((class_id, class_name))
+    return specs
+
+
+def parse_select_file(path):
+    entries = []
+    with open(path, "r", encoding="utf-8-sig") as f:
+        for line_no, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            match = re.match(r"^\s*([^:：]+)\s*[:：]\s*(.+)$", line)
+            if not match:
+                raise ValueError(
+                    "Invalid select_file line {}: '{}'. Expected 'image_id: class_id/class_name'.".format(
+                        line_no, line
+                    )
+                )
+            image_id = match.group(1).strip()
+            class_specs = parse_class_specs(match.group(2))
+            if not class_specs:
+                raise ValueError("No class specs found at line {}.".format(line_no))
+            entries.append({
+                "line_no": line_no,
+                "image_id": image_id,
+                "class_specs": class_specs,
+            })
+    return entries
+
+
+def parse_collected_sample_dir_name(path):
+    rank_match = re.search(r"rank_(\d+)", path.name)
+    idx_match = re.search(r"_idx_([^_]+)", path.name)
+    rank = int(rank_match.group(1)) if rank_match else None
+    idx = int(idx_match.group(1)) if idx_match and idx_match.group(1).isdigit() else None
+    return rank, idx
+
+
+def build_collect_rank_map(collect_dir):
+    if not collect_dir:
+        return {}
+    root = Path(collect_dir)
+    if not root.is_dir():
+        raise FileNotFoundError("collect_dir was not found: {}".format(collect_dir))
+    rank_map = {}
+    for path in root.iterdir():
+        if not path.is_dir():
+            continue
+        rank, idx = parse_collected_sample_dir_name(path)
+        if rank is not None and idx is not None:
+            rank_map[str(rank)] = idx
+            rank_map["{:02d}".format(rank)] = idx
+    return rank_map
+
+
+def build_stem_index_map(eval_dataset):
+    stem_map = {}
+    for idx, file_item in enumerate(eval_dataset.file_list):
+        image1_path = file_item[0]
+        stem = Path(image1_path).stem
+        stem_map[stem] = idx
+    return stem_map
+
+
+def resolve_select_id(image_id, id_type, rank_map, stem_map):
+    key = str(image_id).strip()
+    key_no_zero = str(int(key)) if key.isdigit() else key
+
+    if id_type == "rank":
+        if key_no_zero not in rank_map:
+            raise ValueError("Rank '{}' was not found in collect_dir.".format(image_id))
+        return rank_map[key_no_zero]
+
+    if id_type == "stem":
+        if key not in stem_map:
+            raise ValueError("Image stem '{}' was not found in val file list.".format(image_id))
+        return stem_map[key]
+
+    if id_type == "index":
+        if not key.isdigit():
+            raise ValueError("Validation index '{}' is not an integer.".format(image_id))
+        return int(key)
+
+    if key_no_zero in rank_map:
+        return rank_map[key_no_zero]
+    if key in stem_map:
+        return stem_map[key]
+    if key.isdigit():
+        return int(key)
+    raise ValueError("Could not resolve select id '{}'.".format(image_id))
+
+
+def load_selected_samples_from_file(path, eval_dataset, args):
+    entries = parse_select_file(path)
+    rank_map = build_collect_rank_map(args.collect_dir)
+    stem_map = build_stem_index_map(eval_dataset)
+    selected = []
+    for entry in entries:
+        sample_index = resolve_select_id(
+            entry["image_id"], args.select_id_type, rank_map, stem_map
+        )
+        if sample_index < 0 or sample_index >= len(eval_dataset):
+            raise IndexError(
+                "Resolved sample index {} from '{}' is outside validation dataset [0, {}).".format(
+                    sample_index, entry["image_id"], len(eval_dataset)
+                )
+            )
+        for class_id, class_name in entry["class_specs"]:
+            selected.append({
+                "index": sample_index,
+                "miou": "",
+                "selection_id": entry["image_id"],
+                "cam_class": class_id,
+                "class_name": class_name,
+            })
+    return selected
 
 
 def first_4d_tensor(output):
@@ -376,12 +538,14 @@ def make_overlay(rgb, cam, alpha):
     return np.clip(overlay, 0, 255).astype("uint8"), cam_uint8
 
 
-def output_name(sample_index, image_path):
-    return "{:06d}_{}.png".format(sample_index, Path(image_path).stem)
+def output_name(sample_index, image_path, cam_class=None):
+    suffix = "" if cam_class is None else "_c{:02d}".format(int(cam_class))
+    return "{:06d}_{}{}.png".format(sample_index, Path(image_path).stem, suffix)
 
 
 def generate_cam_for_sample(model, eval_dataset, sample, cam_layer, args, output_dir):
     sample_index = sample["index"]
+    cam_class = int(sample.get("cam_class", args.cam_class))
     image1_path, image2_path, label_path = eval_dataset.file_list[sample_index]
     im1, im2, label = eval_dataset[sample_index]
     im1 = paddle.to_tensor(im1).unsqueeze(0)
@@ -397,7 +561,7 @@ def generate_cam_for_sample(model, eval_dataset, sample, cam_layer, args, output
             logits,
             pred,
             label,
-            args.cam_class,
+            cam_class,
             args.cam_target,
             eval_dataset.ignore_index,
         )
@@ -409,24 +573,30 @@ def generate_cam_for_sample(model, eval_dataset, sample, cam_layer, args, output
 
     overlay_dir = output_dir / "cam_overlay"
     overlay_dir.mkdir(parents=True, exist_ok=True)
-    overlay_path = overlay_dir / output_name(sample_index, image1_path)
+    name_class = cam_class if "cam_class" in sample else None
+    overlay_path = overlay_dir / output_name(sample_index, image1_path, name_class)
     Image.fromarray(overlay).save(overlay_path)
 
     cam_gray_path = ""
     if args.save_cam_gray:
         cam_gray_dir = output_dir / "cam_gray"
         cam_gray_dir.mkdir(parents=True, exist_ok=True)
-        cam_gray_path = cam_gray_dir / output_name(sample_index, image1_path)
+        cam_gray_path = cam_gray_dir / output_name(sample_index, image1_path, name_class)
         Image.fromarray(cam_gray).save(cam_gray_path)
 
     model.clear_gradients()
+    miou = sample.get("miou", "")
+    if isinstance(miou, float):
+        miou = "{:.8f}".format(miou)
     return {
         "index": sample_index,
+        "selection_id": sample.get("selection_id", ""),
         "image1_path": image1_path,
         "image2_path": image2_path,
         "label_path": label_path,
-        "miou": "{:.8f}".format(sample["miou"]),
-        "cam_class": args.cam_class,
+        "miou": miou,
+        "cam_class": cam_class,
+        "class_name": sample.get("class_name", ""),
         "cam_target": args.cam_target,
         "cam_layer": args.resolved_cam_layer,
         "cam_overlay_path": str(overlay_path),
@@ -437,11 +607,13 @@ def generate_cam_for_sample(model, eval_dataset, sample, cam_layer, args, output
 def write_meta(output_path, rows):
     fieldnames = [
         "index",
+        "selection_id",
         "image1_path",
         "image2_path",
         "label_path",
         "miou",
         "cam_class",
+        "class_name",
         "cam_target",
         "cam_layer",
         "cam_overlay_path",
@@ -505,9 +677,15 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    scores = collect_sample_scores(model, eval_dataset)
-    selected = select_samples(scores, args.select_by, args.topk)
-    print("Selected {} samples for CAM.".format(len(selected)))
+    if args.select_file:
+        selected = load_selected_samples_from_file(args.select_file, eval_dataset, args)
+        print("Loaded {} sample/class CAM targets from {}.".format(
+            len(selected), args.select_file
+        ))
+    else:
+        scores = collect_sample_scores(model, eval_dataset)
+        selected = select_samples(scores, args.select_by, args.topk)
+        print("Selected {} samples for CAM.".format(len(selected)))
 
     rows = []
     for cam_index, sample in enumerate(selected):
