@@ -19,6 +19,7 @@ Example:
 from __future__ import annotations
 
 import argparse
+import csv
 import re
 import sys
 from dataclasses import dataclass
@@ -157,6 +158,46 @@ def parse_args():
         action="store_true",
         help="Do not draw the class legend at the bottom.",
     )
+    parser.add_argument(
+        "--boxes",
+        type=Path,
+        help=(
+            "Optional boxes CSV. Coordinates are in original single-image pixels. "
+            "Expected columns: rank or idx, x1, y1, x2, y2; optional class_id."
+        ),
+    )
+    parser.add_argument(
+        "--box-color",
+        default="red",
+        help="Highlight box color. Default: red.",
+    )
+    parser.add_argument(
+        "--box-width",
+        type=int,
+        default=4,
+        help="Highlight box width on output tiles. Default: 4.",
+    )
+    parser.add_argument(
+        "--box-shadow-color",
+        default="white",
+        help="Thin contrast outline color for highlight boxes. Default: white.",
+    )
+    parser.add_argument(
+        "--no-box-shadow",
+        action="store_true",
+        help="Draw only the main highlight box without the contrast outline.",
+    )
+    parser.add_argument(
+        "--box-boundary-margin",
+        type=int,
+        default=4,
+        help="Original-image pixels used to judge boundary boxes. Default: 4.",
+    )
+    parser.add_argument(
+        "--no-box-boundary-inset",
+        action="store_true",
+        help="Do not move boundary-touching boxes inward; draw boxes exactly from CSV coordinates.",
+    )
     return parser.parse_args()
 
 
@@ -255,6 +296,170 @@ def select_samples(samples: list[SampleDir], ids: list[str]) -> list[SampleDir]:
     if missing:
         print("WARNING: missing sample ids/ranks: {}".format(", ".join(missing)), file=sys.stderr)
     return selected
+
+
+def sample_key(sample: SampleDir) -> str:
+    if sample.rank is not None:
+        return str(sample.rank)
+    if sample.idx is not None:
+        return str(sample.idx)
+    return sample.path.name
+
+
+def parse_color(value: str) -> tuple[int, int, int]:
+    named = {
+        "red": (255, 0, 0),
+        "white": (255, 255, 255),
+        "black": (0, 0, 0),
+        "yellow": (255, 230, 0),
+        "cyan": (0, 255, 255),
+    }
+    text = str(value).strip().lower()
+    if text in named:
+        return named[text]
+    if text.startswith("#") and len(text) == 7:
+        return tuple(int(text[i:i + 2], 16) for i in (1, 3, 5))
+    parts = [part.strip() for part in text.split(",")]
+    if len(parts) == 3:
+        return tuple(max(0, min(255, int(part))) for part in parts)
+    raise ValueError("Unsupported color '{}'. Use a name, #RRGGBB, or R,G,B.".format(value))
+
+
+def box_row_key(row: dict[str, str]) -> Optional[str]:
+    for key in ("rank", "sample_rank", "image_id", "id", "sample_id"):
+        value = row.get(key)
+        if value not in (None, ""):
+            text = str(value).strip()
+            if text.isdigit():
+                return str(int(text))
+            rank_match = re.search(r"rank_(\d+)", text)
+            if rank_match:
+                return str(int(rank_match.group(1)))
+            return text
+    for key in ("idx", "index", "sample_index"):
+        value = row.get(key)
+        if value not in (None, ""):
+            return "idx:{}".format(str(value).strip())
+    return None
+
+
+def boundary_sides_for_box(
+    box: tuple[float, float, float, float],
+    source_size: tuple[int, int],
+    margin: int,
+) -> set[str]:
+    x1, y1, x2, y2 = box
+    source_w, source_h = source_size
+    sides = set()
+    if source_w <= 0 or source_h <= 0:
+        return sides
+    if x1 <= margin:
+        sides.add("left")
+    if y1 <= margin:
+        sides.add("top")
+    if x2 >= source_w - 1 - margin:
+        sides.add("right")
+    if y2 >= source_h - 1 - margin:
+        sides.add("bottom")
+    return sides
+
+
+def load_boxes(path: Optional[Path]) -> dict[str, list[dict[str, object]]]:
+    boxes: dict[str, list[dict[str, object]]] = {}
+    if path is None:
+        return boxes
+    if not path.is_file():
+        raise FileNotFoundError("Boxes CSV not found: {}".format(path))
+    with path.open("r", newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        required = {"x1", "y1", "x2", "y2"}
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError("Boxes CSV missing columns: {}".format(", ".join(sorted(missing))))
+        for row in reader:
+            key = box_row_key(row)
+            if key is None:
+                continue
+            x1, y1, x2, y2 = (float(row[name]) for name in ("x1", "y1", "x2", "y2"))
+            x_min, x_max = sorted((x1, x2))
+            y_min, y_max = sorted((y1, y2))
+            sides = set()
+            for side in str(row.get("boundary_sides", "")).split("|"):
+                side = side.strip().lower()
+                if side:
+                    sides.add(side)
+            boxes.setdefault(key, []).append({
+                "coords": (x_min, y_min, x_max, y_max),
+                "boundary_sides": sides,
+            })
+    return boxes
+
+
+def boxes_for_sample(boxes: dict[str, list[tuple[float, float, float, float]]], sample: SampleDir):
+    result = []
+    if sample.rank is not None:
+        result.extend(boxes.get(str(sample.rank), []))
+    if sample.idx is not None:
+        result.extend(boxes.get("idx:{}".format(sample.idx), []))
+    result.extend(boxes.get(sample.path.name, []))
+    return result
+
+
+def draw_tile_boxes(
+    draw: ImageDraw.ImageDraw,
+    tile_box: tuple[int, int, int, int],
+    boxes: list[dict[str, object]],
+    source_size: tuple[int, int],
+    color: tuple[int, int, int],
+    shadow_color: tuple[int, int, int],
+    width: int,
+    boundary_margin: int,
+    boundary_inset: bool,
+):
+    if not boxes:
+        return
+    x0, y0, x1, y1 = tile_box
+    tile_w = x1 - x0
+    tile_h = y1 - y0
+    source_w, source_h = source_size
+    if source_w <= 0 or source_h <= 0:
+        return
+    sx = tile_w / source_w
+    sy = tile_h / source_h
+    inset = max(width + 2, 1)
+    for box_item in boxes:
+        bx1, by1, bx2, by2 = box_item["coords"]
+        rect = [
+            int(round(x0 + bx1 * sx)),
+            int(round(y0 + by1 * sy)),
+            int(round(x0 + bx2 * sx)),
+            int(round(y0 + by2 * sy)),
+        ]
+        if boundary_inset:
+            sides = set(box_item.get("boundary_sides", set()))
+            sides.update(boundary_sides_for_box((bx1, by1, bx2, by2), source_size, boundary_margin))
+            if "left" in sides:
+                rect[0] = max(rect[0], x0 + inset)
+            if "top" in sides:
+                rect[1] = max(rect[1], y0 + inset)
+            if "right" in sides:
+                rect[2] = min(rect[2], x1 - inset)
+            if "bottom" in sides:
+                rect[3] = min(rect[3], y1 - inset)
+        if rect[2] <= rect[0] or rect[3] <= rect[1]:
+            continue
+        if shadow_color is not None:
+            shadow_width = max(width + 2, 1)
+            draw.rectangle(rect, outline=shadow_color, width=shadow_width)
+        draw.rectangle(rect, outline=color, width=max(width, 1))
+
+
+def image_size(path: Path) -> tuple[int, int]:
+    try:
+        with Image.open(path) as img:
+            return img.size
+    except Exception:
+        return (0, 0)
 
 
 def parse_class_line(line: str) -> Optional[str]:
@@ -395,6 +600,9 @@ def build_figure(samples: list[SampleDir], args) -> Image.Image:
     draw = ImageDraw.Draw(image)
     title_font = load_font(args.title_font_size, italic=True, bold=True)
     legend_font = load_font(args.legend_font_size, italic=True)
+    boxes_by_sample = load_boxes(args.boxes)
+    box_color = parse_color(args.box_color)
+    box_shadow_color = None if args.no_box_shadow else parse_color(args.box_shadow_color)
 
     grid_x = margin
     header_y = margin
@@ -406,10 +614,24 @@ def build_figure(samples: list[SampleDir], args) -> Image.Image:
 
     for row_idx, sample in enumerate(samples):
         y0 = grid_y + row_idx * (tile + gap)
+        sample_boxes = boxes_for_sample(boxes_by_sample, sample)
+        source_size = image_size(sample.path / "rgb.png")
         for col_idx, (_label, rel_path, kind) in enumerate(columns):
             x0 = grid_x + col_idx * (tile + gap)
             tile_img = open_tile(sample.path / rel_path, tile, kind)
             image.paste(tile_img, (x0, y0))
+            if sample_boxes and rel_path.startswith("pred_color/"):
+                draw_tile_boxes(
+                    draw,
+                    (x0, y0, x0 + tile, y0 + tile),
+                    sample_boxes,
+                    source_size,
+                    box_color,
+                    box_shadow_color,
+                    args.box_width,
+                    args.box_boundary_margin,
+                    not args.no_box_boundary_inset,
+                )
 
     if not args.no_legend:
         class_names = load_class_names(args.class_file, args.num_classes)

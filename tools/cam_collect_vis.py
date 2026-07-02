@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import os
 import re
 import shutil
@@ -150,6 +151,20 @@ def parse_args():
         "--overwrite",
         action="store_true",
         help="Regenerate existing CAM files.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Do not delete existing cam_vis folders at startup. Existing CAM files "
+            "are skipped unless --overwrite is also set."
+        ),
+    )
+    parser.add_argument(
+        "--empty_cache_every",
+        type=int,
+        default=1,
+        help="Clear GPU cache every N generated CAMs. Default: 1",
     )
     parser.add_argument(
         "--max_samples",
@@ -551,6 +566,19 @@ def write_csv(path, rows):
         writer.writerows(rows)
 
 
+def clear_runtime_cache(model=None):
+    if model is not None:
+        try:
+            model.clear_gradients()
+        except Exception:
+            pass
+    gc.collect()
+    if "paddle" in globals() and hasattr(paddle, "device") and hasattr(paddle.device, "cuda"):
+        empty_cache = getattr(paddle.device.cuda, "empty_cache", None)
+        if empty_cache is not None:
+            empty_cache()
+
+
 def reset_cam_vis_dirs(samples):
     for sample in samples:
         cam_dir = sample.path / "cam_vis"
@@ -614,18 +642,35 @@ def generate_for_sample_class(
             "skipped": True,
         }
 
-    im1, im2, label = eval_dataset[sample.index]
-    im1 = paddle.to_tensor(im1).unsqueeze(0)
-    im2 = paddle.to_tensor(im2).unsqueeze(0)
-    label = paddle.to_tensor(label).unsqueeze(0).astype("int64")
+    im1_np, im2_np, label_np = eval_dataset[sample.index]
+    im1 = paddle.to_tensor(im1_np).unsqueeze(0)
+    im2 = paddle.to_tensor(im2_np).unsqueeze(0)
+    label = paddle.to_tensor(label_np).unsqueeze(0).astype("int64")
 
-    model.clear_gradients()
-    with GradCAM(cam_layer) as cam_runner:
-        logits = get_model_logits(model, im1, im2, ori_shape=label.shape[-2:])
-        pred = paddle.argmax(logits, axis=1, keepdim=True).astype("int32")
-        score = cam_target_score(logits, pred, label, class_id, args.cam_target, eval_dataset.ignore_index)
-        score.backward()
-        cam = cam_runner.compute()
+    cam_runner = None
+    logits = None
+    pred = None
+    score = None
+    try:
+        model.clear_gradients()
+        cam_runner = GradCAM(cam_layer)
+        with cam_runner:
+            logits = get_model_logits(model, im1, im2, ori_shape=label.shape[-2:])
+            pred = paddle.argmax(logits, axis=1, keepdim=True).astype("int32")
+            score = cam_target_score(logits, pred, label, class_id, args.cam_target, eval_dataset.ignore_index)
+            score.backward()
+            cam = cam_runner.compute()
+    finally:
+        if cam_runner is not None:
+            cam_runner.activation = None
+            cam_runner.gradient = None
+        del score
+        del pred
+        del logits
+        del label
+        del im2
+        del im1
+        clear_runtime_cache(model)
 
     overlay, cam_gray = make_overlay(rgb, cam, args.alpha)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -637,7 +682,10 @@ def generate_for_sample_class(
         gray_path.parent.mkdir(parents=True, exist_ok=True)
         Image.fromarray(cam_gray).save(gray_path)
 
-    model.clear_gradients()
+    del overlay
+    del cam_gray
+    del cam
+    clear_runtime_cache(model)
     return {
         "sample": sample.name,
         "index": sample.index,
@@ -685,7 +733,11 @@ def main():
     if not samples:
         raise ValueError("No rank_* sample folders found in {}".format(args.collect_dir))
 
-    reset_cam_vis_dirs(samples)
+    if args.resume:
+        for sample in samples:
+            (sample.path / "cam_vis").mkdir(parents=True, exist_ok=True)
+    else:
+        reset_cam_vis_dirs(samples)
 
     class_names = load_class_names(args.class_file, args.num_classes)
     all_rows = []
@@ -744,6 +796,7 @@ def main():
 
             cam_vis_dir = sample.path / "cam_vis"
             sample_rows = []
+            generated_count = 0
             for class_id in classes:
                 row = generate_for_sample_class(
                     model,
@@ -761,6 +814,9 @@ def main():
                 row["model"] = model_name
                 sample_rows.append(row)
                 all_rows.append(row)
+                generated_count += 1
+                if args.empty_cache_every > 0 and generated_count % args.empty_cache_every == 0:
+                    clear_runtime_cache(model)
 
             write_csv(sample.path / "cam_vis" / "cam_vis_meta.csv", sample_rows)
             print(
@@ -770,10 +826,7 @@ def main():
             )
 
         del model
-        if hasattr(paddle, "device") and hasattr(paddle.device, "cuda"):
-            empty_cache = getattr(paddle.device.cuda, "empty_cache", None)
-            if empty_cache is not None:
-                empty_cache()
+        clear_runtime_cache()
 
     write_csv(args.collect_dir / "cam_vis_meta.csv", all_rows)
     print("\nSaved CAMs under each sample's cam_vis directory.")
