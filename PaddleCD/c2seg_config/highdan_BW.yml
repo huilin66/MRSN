@@ -7,4 +7,4 @@ model:
   hsi_chs: 116
   msi_chs: 4
   sar_chs: 2
-  pretrained: /home/huilin/.paddleseg/pretrained_model/hrnet_w48_ssld/model.pdparams
+  # pretrained: /home/user/.paddleseg/pretrained_model/hrnet_w48_ssld/model.pdparams

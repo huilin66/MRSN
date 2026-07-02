@@ -13,8 +13,7 @@ loss:
   types:
     - type: MixedLoss
       losses:
-        - type: OhemCrossEntropyLoss_Smooth
-          smoothing: 0.05
+        - type: Poly1Loss_Smooth
         - type: DiceLoss
       coef: [1, 0.5]
   coef: [1]
