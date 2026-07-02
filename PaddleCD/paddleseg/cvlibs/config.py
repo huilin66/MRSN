@@ -14,6 +14,7 @@
 
 import codecs
 import os
+import re
 from typing import Any, Dict, Generic
 
 import paddle
@@ -21,6 +22,47 @@ import yaml
 
 from paddleseg.cvlibs import manager
 from paddleseg.utils import logger
+
+
+def _load_dotenv_once(start_dir):
+    if getattr(_load_dotenv_once, "_loaded", False):
+        return
+    _load_dotenv_once._loaded = True
+
+    current = os.path.abspath(start_dir)
+    candidates = []
+    while True:
+        candidates.append(os.path.join(current, ".env"))
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
+    for env_path in candidates:
+        if not os.path.isfile(env_path):
+            continue
+        with codecs.open(env_path, "r", "utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+        break
+
+
+def _expand_env_vars(value):
+    if isinstance(value, dict):
+        return {key: _expand_env_vars(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    if isinstance(value, str):
+        value = re.sub(r"\$\{([^}]+)\}", lambda m: os.environ.get(m.group(1), m.group(0)), value)
+        return os.path.expandvars(value)
+    return value
 
 
 class Config(object):
@@ -103,6 +145,7 @@ class Config(object):
 
     def _parse_from_yaml(self, path: str):
         '''Parse a yaml file and build config'''
+        _load_dotenv_once(os.path.dirname(path))
         with codecs.open(path, 'r', 'utf-8') as file:
             dic = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -112,7 +155,7 @@ class Config(object):
             base_path = os.path.join(cfg_dir, base_path)
             base_dic = self._parse_from_yaml(base_path)
             dic = self._update_dic(dic, base_dic)
-        return dic
+        return _expand_env_vars(dic)
 
     def update(self,
                learning_rate: float = None,

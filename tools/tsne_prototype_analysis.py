@@ -55,6 +55,23 @@ def parse_args():
         help="Directory for figures, CSVs, and cached prototypes.",
     )
     parser.add_argument(
+        "--redraw_from_cache",
+        action="store_true",
+        help=(
+            "Only read prototypes_gt.npz/prototypes_pred.npz from output_dir and "
+            "regenerate t-SNE figures/CSVs. This does not load models or extract features."
+        ),
+    )
+    parser.add_argument(
+        "--redraw_from_points",
+        action="store_true",
+        help=(
+            "Only read prototype_gt_points.csv/prototype_pred_points.csv from output_dir and "
+            "regenerate figures/CSVs. This keeps existing t-SNE coordinates and only updates "
+            "plot styling/class names."
+        ),
+    )
+    parser.add_argument(
         "--feature_layer",
         default="auto",
         help="Feature layer name for all models unless overridden by JSON. Default: auto",
@@ -711,6 +728,141 @@ def save_prototype_cache(output_path, records):
     )
 
 
+def load_prototype_cache(input_path):
+    if not input_path.is_file():
+        return []
+    data = np.load(input_path, allow_pickle=True)
+    features = data["features"]
+    meta = json.loads(str(data["meta"].item()))
+    records = []
+    for index, item in enumerate(meta):
+        record = dict(item)
+        record["feature"] = np.asarray(features[index]).astype("float32")
+        records.append(record)
+    return records
+
+
+def load_points_csv(input_path):
+    if not input_path.is_file():
+        return None, []
+
+    points = []
+    records = []
+    with input_path.open("r", newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if not row:
+                continue
+            points.append([float(row["x"]), float(row["y"])])
+            record = dict(row)
+            record["class_id"] = int(record["class_id"])
+            if "pixel_count" in record and record["pixel_count"] != "":
+                record["pixel_count"] = int(float(record["pixel_count"]))
+            records.append(record)
+
+    if not points:
+        return None, []
+    return np.asarray(points, dtype="float32"), records
+
+
+def redraw_from_points(output_dir, args):
+    gt_points, gt_records = load_points_csv(output_dir / "prototype_gt_points.csv")
+    pred_points, pred_records = load_points_csv(output_dir / "prototype_pred_points.csv")
+    all_records = gt_records + pred_records
+
+    if not all_records:
+        raise RuntimeError(
+            "No cached t-SNE points found in {}. Expected prototype_gt_points.csv or "
+            "prototype_pred_points.csv.".format(output_dir)
+        )
+
+    num_classes = max(int(record["class_id"]) for record in all_records) + 1
+    class_names = resolve_class_names(args.class_names, args.class_file, num_classes)
+    apply_class_names_to_records(all_records, class_names)
+
+    results = []
+    if gt_records:
+        fig_path = output_dir / "tsne_gt_by_class.png"
+        csv_path = output_dir / "prototype_gt_points.csv"
+        plot_tsne(gt_points, gt_records, "gt", fig_path, class_names)
+        write_points_csv(csv_path, gt_points, gt_records)
+        results.append({
+            "source": "gt",
+            "count": len(gt_records),
+            "figure": str(fig_path),
+            "csv": str(csv_path),
+        })
+        print("Redrew gt t-SNE figure to {}".format(os.path.abspath(fig_path)))
+    if pred_records:
+        fig_path = output_dir / "tsne_pred_by_class.png"
+        csv_path = output_dir / "prototype_pred_points.csv"
+        plot_tsne(pred_points, pred_records, "pred", fig_path, class_names)
+        write_points_csv(csv_path, pred_points, pred_records)
+        results.append({
+            "source": "pred",
+            "count": len(pred_records),
+            "figure": str(fig_path),
+            "csv": str(csv_path),
+        })
+        print("Redrew pred t-SNE figure to {}".format(os.path.abspath(fig_path)))
+
+    meta_path = output_dir / "tsne_meta_redraw.json"
+    with meta_path.open("w", encoding="utf-8") as f:
+        json.dump({
+            "args": vars(args),
+            "class_names": class_names,
+            "results": results,
+            "prototype_counts": {
+                "gt": len(gt_records),
+                "pred": len(pred_records),
+            },
+            "source": "points",
+        }, f, indent=2, ensure_ascii=False)
+    print("Saved redraw metadata to {}".format(os.path.abspath(meta_path)))
+
+
+def redraw_from_cache(output_dir, args):
+    gt_cache = output_dir / "prototypes_gt.npz"
+    pred_cache = output_dir / "prototypes_pred.npz"
+    gt_records = load_prototype_cache(gt_cache)
+    pred_records = load_prototype_cache(pred_cache)
+    all_records = gt_records + pred_records
+
+    if not all_records:
+        raise RuntimeError(
+            "No cached prototypes found in {}. Expected prototypes_gt.npz or prototypes_pred.npz.".format(
+                output_dir
+            )
+        )
+
+    num_classes = max(int(record["class_id"]) for record in all_records) + 1
+    class_names = resolve_class_names(args.class_names, args.class_file, num_classes)
+    apply_class_names_to_records(all_records, class_names)
+
+    results = []
+    gt_result = process_source(gt_records, "gt", output_dir, args, class_names)
+    if gt_result:
+        results.append(gt_result)
+    pred_result = process_source(pred_records, "pred", output_dir, args, class_names)
+    if pred_result:
+        results.append(pred_result)
+
+    meta_path = output_dir / "tsne_meta_redraw.json"
+    with meta_path.open("w", encoding="utf-8") as f:
+        json.dump({
+            "args": vars(args),
+            "class_names": class_names,
+            "results": results,
+            "prototype_counts": {
+                "gt": len(gt_records),
+                "pred": len(pred_records),
+            },
+            "source": "cache",
+        }, f, indent=2, ensure_ascii=False)
+    print("Redrew t-SNE figures from cache in {}".format(os.path.abspath(output_dir)))
+    print("Saved redraw metadata to {}".format(os.path.abspath(meta_path)))
+
+
 def process_source(source_records, source, output_dir, args, class_names):
     if not source_records:
         print("No {} prototypes found; skip t-SNE.".format(source))
@@ -737,30 +889,41 @@ def main():
     args = parse_args()
 
     global np
-    global cv2
-    global paddle
     global plt
     global PCA
     global TSNE
+    global cv2
+    global paddle
     global Config
     global config_check
     global get_sys_env
     global utils
 
-    import cv2
     import numpy as np
-    import paddle
     import matplotlib.pyplot as plt
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.redraw_from_points:
+        redraw_from_points(output_dir, args)
+        return
+
     from sklearn.decomposition import PCA
     from sklearn.manifold import TSNE
+
+    if args.redraw_from_cache:
+        redraw_from_cache(output_dir, args)
+        return
+
+    import cv2
+    import paddle
     from paddleseg.cvlibs import Config
     from paddleseg.utils import config_check, get_sys_env, utils
 
     paddle.set_device(choose_device(args.device))
 
     specs = load_model_specs(args)
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     all_records = []
     model_meta = []

@@ -22,6 +22,8 @@ manuscript/
 
 .venv/
 .vscode/
+.env
+.env.local
 
 # LaTeX build products
 *.aux
@@ -40,3 +42,5 @@ manuscript/
 
 
 *.cff
+
+upload/
