@@ -1,0 +1,1367 @@
+                                          Cross-City Matters: A Multimodal Remote Sensing Benchmark
+                                        Dataset for Cross-City Semantic Segmentation using High-Resolution
+                                                           Domain Adaptation Networks
+
+                                         Danfeng Honga , Bing Zhanga,b,∗, Hao Lic , Yuxuan Lia , Jing Yaoa , Chenyu Lid , Martin Wernerc ,
+                                                            Jocelyn Chanussote,a , Alexander Zipff , Xiao Xiang Zhug
+                                                a Aerospace Information Research Institute, Chinese Academy of Sciences, Beijing 100094, China;
+                                          b College of Resources and Environment, University of Chinese Academy of Sciences, Beijing 100049, China;
+                                                 c Big Geospatial Data Management, Technical University of Munich, Munich 85521, Germany;
+arXiv:2309.16499v2 [cs.CV] 3 Oct 2023
+
+
+
+
+                                                             d School of Mathematics, Southeast University, Nanjing 210096, China;
+                                                       e Univ. Grenoble Alpes, CNRS, Grenoble INP, GIPSA-Lab, Grenoble 38000, France;
+                                                  f GIScience Chair, Institute of Geography, Heidelberg University, Heidelberg 69120, Germany;
+                                                 g Data Science in Earth Observation, Technical University of Munich, Munich 80333, Germany.
+
+
+
+
+                                        Abstract
+
+                                        Artificial intelligence (AI) approaches nowadays have gained remarkable success in single-modality-
+                                        dominated remote sensing (RS) applications, especially with an emphasis on individual urban en-
+                                        vironments (e.g., single cities or regions). Yet these AI models tend to meet the performance
+                                        bottleneck in the case studies across cities or regions, due to the lack of diverse RS information
+                                        and cutting-edge solutions with high generalization ability. To this end, we build a new set of mul-
+                                        timodal remote sensing benchmark datasets (including hyperspectral, multispectral, SAR) for the
+                                        study purpose of the cross-city semantic segmentation task (called C2Seg dataset), which consists
+                                        of two cross-city scenes, i.e., Berlin-Augsburg (in Germany) and Beijing-Wuhan (in China). Beyond
+                                        the single city, we propose a high-resolution domain adaptation network, HighDAN for short, to
+                                        promote the AI model’s generalization ability from the multi-city environments. HighDAN is ca-
+                                        pable of retaining the spatially topological structure of the studied urban scene well in a parallel
+                                        high-to-low resolution fusion fashion but also closing the gap derived from enormous differences of
+                                        RS image representations between different cities by means of adversarial learning. In addition, the
+                                        Dice loss is considered in HighDAN to alleviate the class imbalance issue caused by factors across
+
+                                          ∗ Corresponding author
+
+                                            Email addresses: hongdf@aircas.ac.cn (Danfeng Hong), zb@radi.ac.cn (Bing Zhang), hao_bgd.li@tum.de
+                                        (Hao Li), liyuxuan231@mails.ucas.ac.cn (Yuxuan Li), yaojing@aircas.ac.cn (Jing Yao), lichenyu@seu.edu.cn
+                                        (Chenyu Li), martin.werner@tum.de (Martin Werner), jocelyn.chanussot@grenoble-inp.fr (Jocelyn Chanussot),
+                                        zipf@uni-heidelberg.de (Alexander Zipf), xiaoxiang.zhu@tum.de (Xiao Xiang Zhu)
+
+
+
+                                        Preprint submitted to Elsevier                                                                  October 4, 2023
+cities. Extensive experiments conducted on the C2Seg dataset show the superiority of our High-
+DAN in terms of segmentation performance and generalization ability, compared to state-of-the-art
+competitors. The C2Seg dataset and the semantic segmentation toolbox (involving the proposed
+HighDAN) will be available publicly at https://github.com/danfenghong.
+Keywords: Cross-city, Deep Learning, Dice Loss, Domain Adaptation, High-resolution Network,
+Land Cover, Multimodal Benchmark Datasets, Remote Sensing, Segmentation.
+
+
+1. Introduction
+
+   Remote sensing (RS) is an essential means to acquire large-scale and high-quality Earth obser-
+vation (EO) data in a concise time, which significantly advances the development of EO techniques.
+However, the conventional expert system-centric mode has run into bottlenecks and cannot meet
+the EO demand of the RS big data era well, particularly when facing complex urban scenes. Artifi-
+cial Intelligence (AI) techniques provide one viable option that is capable of finding out potentially
+valuable knowledge from the vast amounts of pluralistic EO data more intelligently, enabling the
+understanding and monitoring of the contemporary urban environment.
+   These advanced AI models, e.g., deep learning, have been successfully applied for various RS
+and geoscience applications, which have been proven to be particularly applicable to the unitary
+urban environment where the types, characteristics, and spatial distributions of surface elements
+are significantly consistent and similar. Nevertheless, the ability to address multiple urban envi-
+ronmental issues with highly spatio-temporal and regional change remains limited. The possibly
+feasible solutions are two-fold. On the one hand, the joint exploitation of multimodal RS data has
+been proven to be helpful to improve the processing ability of cross-city or regional cases, since the
+RS data acquired from different platforms or sensors can provide richer and more diverse comple-
+mentary information. On the other hand, designing more leading-edge AI models with a focus on
+promoting the generalization ability across cities or regions is an inexorable trend to alleviate the
+semantic gap between different urban environments, making it mutually transferable for knowledge.
+   In recent years, enormous efforts have been made to couple or jointly analyze different RS
+observation sources by the attempts to design advanced fusion and interpretation methods to achieve
+a more diversified description for the studied urban scene. In particular, a growing body of studies
+has confirmed the achievement of multimodal AI models in one single urban environment. It should
+
+
+
+                                                  2
+be noted, however, that multi-city-related cases are evolving at a relatively slow speed. This slow
+progression can be satisfactorily explained by two very likely reasons as follows.
+
+   • One refers to the lack of high-quality multimodal RS benchmark datasets for a better under-
+     standing of cross-city environments.
+
+   • Another is that currently developed methodologies prefer to focus on extreme performance
+     pursuit in one single urban environment rather than improve the model generalization ability,
+     particularly for diverse urban environments (e.g., different cities or regions).
+
+   To boost technical breakthroughs and accelerate the development of EO applications across
+cities or regions, creating a multimodal RS benchmark dataset for cross-city land cover segmen-
+tation makes necessary. Just as important, the high generalization ability in terms of methodol-
+ogy development is of paramount importance. This drives us to develop such a model with high
+transferability between different cities or regions by means of domain adaption (DA) techniques.
+Numerous experiments will be conducted on the cross-city land cover segmentation dataset to show
+the superiority of DA-based approaches over those semantic segmentation algorithms that do not
+consider knowledge transfer across domains. More specifically, our contributions in this paper can
+be unfolded as follows.
+
+   • A new set of multimodal RS benchmark datasets is built for the study purpose of the cross-
+     city semantic segmentation task, named C2Seg for short. C2Seg consists of two subsets,
+     i.e., Berlin-Augsburg (in Germany) dataset collected from EnMAP, Sentinel-2, and Sentinel-
+     1, respectively, Beijing-Wuhan (in China) dataset collected from Gaofen-5, Gaofen-6, and
+     Gaofen-3, respectively. The C2Seg dataset will be available freely and publicly, promot-
+     ing the research progress on semantic segmentation across cities or regions substantially.
+     To the best of our knowledge, C2Seg is the first benchmark dataset about the cross-city
+     multimodal RS image segmentation task, which considers the three-modality study case,
+     including hyperspectral, multispectral, and synthetic aperture radar (SAR) data acquired
+     from the currently well-known satellite missions. The C2Seg datasets have been utilized
+     for the WHISPERS2023 conference https://www.ieee-whispers.com/ in the capacity of
+     Challenge 1: Cross-City Multimodal Semantic Segmentation. These datasets are accessible
+     at https://www.ieee-whispers.com/cross-city-challenge/, with the training data al-
+
+
+
+                                                  3
+      ready made available. Shortly, we plan to make all datasets, including both training and
+      testing data, accessible to the wider research community.
+
+   • A high-resolution domain adaptation network (HighDAN) is devised to bridge the gap be-
+      tween RS images from different urban environments utilizing adversarial learning, thereby
+      making it possible to transfer the learned knowledge from one domain to another effectively
+      and eliminate inter-class variations to a great extent. Further, HighDAN, which is built based
+      on the high-resolution network (HR-Net), is capable of capturing multi-scaled image repre-
+      sentations from parallel high-to-low-resolution subnetworks, yielding repetitive information
+      exchange across different resolutions in a highly efficient manner.
+
+   • To reduce the impact of the sample number imbalance between classes due to the multi-city
+      studies, the Dice loss is considered and embedded in the proposed HighDAN.
+
+   The remaining sections of the paper are organized as follows. Section 2 reviews the related work
+for semantic segmentation in the land cover classification task systematically from the perspectives
+of individual study scenes and cross-region (or cross-city) cases. Section 3 introduces the newly-built
+datasets and correspondingly elaborates on the proposed methodology. Experiments are conducted
+on the datasets with extensive discussion and analysis in Section 4. Finally, Section 5 makes the
+conclusion of this paper with some remaining challenges and plausible future solutions.
+
+
+2. Related Work
+
+   Over the past decade, deep learning (DL) has been garnering increasing attention in many ap-
+plication fields [1], owing to its powerful ability for data representation and learning. In particular,
+the ever-perfecting DL techniques for RS enable accurate and automatic land cover mapping. Ac-
+cording to different studied scenes, we divide these approaches into individual environments and
+multi-region (or city) ones, where single-modality and multimodal RS data are further involved.
+
+2.1. Semantic Segmentation on Individual Environments
+
+   With the emergence and rapid development of DL, there have been recently numerous semantic
+segmentation methods successfully developed for RS with a focus on a single studied scene [2].
+Kampffmeyer et al. [3] developed deep convolutional neural networks (CNNs) for semantic seg-
+mentation in terms of small objects in urban areas, where the uncertainty in CNNs is modeled by
+
+                                                   4
+Bayesian approximation in Gaussian process [4]. The CNNs-based architecture was also used in
+[5] for semantic segmentation on multispectral RS images rather than high-resolution RGB images.
+In this work, synthetic multispectral images are generated for initializing deep CNNs to alleviate
+the effects of label scarcity. Yi et al. [6] proposed a deep residual U-Net (ResUNet) framework,
+which consists of cascade down-sampling and up-sampling subnetworks, for urban building extrac-
+tion using very high-resolution (VHR) RS images. Further, Diakogiannis et al. [7] designed an
+enhanced ResUNet version, ResUNet-a, with atrous convolutions for semantic segmentation of RS
+images. A multi-scale semantic segmentation network was proposed in [8] for fine-grained urban
+functional zone classification using VHR RS images and object-based strategies. Adding to this
+advancement, Wang et al. [9] introduced a recent breakthrough in the field, unveiling an efficient
+U-shaped transformer network custom-tailored for the precise execution of semantic segmentation
+tasks in VHR urban scene images. Concurrently, He and his collaborators [10] incorporated the
+Swin transformer into the U-Net architecture, further enhancing the capabilities of semantic seg-
+mentation in RS applications. In a recent development, as documented in [11], a novel approach
+following the SegFormer [12] framework, enriched by the utilization of hypercolumns, has been
+employed for seismic facies segmentation. Although these DL approaches have provided superior
+segmentation accuracy over traditional model-driven models on single-modality RS images, they
+inevitably meet the performance bottleneck in the complex scene understanding task (due to the
+lack of diverse modality information).
+   With the ever-growing availability of RS data sources from well-known spaceborne and airborne
+missions, e.g., Gaofen in China, Sentinel in the EU, and Landsat in the USA, multimodal RS
+techniques have been garnering increasing attention and made extraordinary progress in various
+EO-related tasks. The data acquired by different platforms can provide diverse and complementary
+information [13]. The joint exploitation of different RS data has been therefore proven to be effective
+in further enhancing our understanding, possibilities, and capabilities in a single urban environment.
+As the mainstream application, semantic segmentation of multimodal RS images using DL has been
+widely studied in recent years. Audebert et al. [14] extracted the multi-scaled deep features from
+multimodal EO data for semantic labeling. Further, the same authors extended their work in [14]
+by implementing the multi-scale deep fully convolutional networks (FCNs) [15, 16] based on SegNet
+[17] to process and understand multimodal RS data for land cover segmentation [18]. Similar to
+[19], they also discussed the fusion strategies of different RS modalities, e.g., early, middle, and late
+
+
+                                                   5
+fusion. In [20], multi-sensor cloud and shadow segmentation are investigated using CNNs. Wurm
+et al. [21] proposed to transfer FCNs trained from external datasets for improving the semantic
+segmentation performance of cross-modal satellite images. Segal et al. [22] designed a CNNs-based
+cloud detection algorithm based on the Deeplab architecture [23] for multimodal satellite images,
+achieving an effective detection performance improvement. Ren et al. [24] proposed a dual-stream
+high-resolution network (HR-Net) [25] for the deep fusion of GF-2 and GF-3 multimodal RS data
+for land cover classification. In the work by Adriano et al. [26], the authors explored the mapping
+and evaluation of building damage from a segmentation perspective, leveraging the rich information
+provided by multimodal and multitemporal RS data, marking a significant advancement in the field
+of damage assessment.
+
+
+2.2. Semantic Segmentation across Regions or Cities
+
+   Currently developed semantic segmentation networks of RS images in terms of the design of
+network architecture, module details, and the use of loss functions have reached their performance
+peak. It is a noticeable phenomenon, however, that these models are more often than not well-
+designed for individual study scenes. This will lead to poor generalization ability for the model,
+which can not well match the level of the segmentation performance, particularly in the cases of
+cross-city or cross-region studies. For this reason, researchers have started gradually paying more
+attention to the task of semantic segmentation across regions or cities.
+   Domain adaptation (DA) has been proven to be helpful in reducing the semantic gap between
+source and target domains [27]. The DA-related approaches have been recently designed to address
+the challenge of cross-scene RS image semantic segmentation. For example, Chen et al. [28]
+proposed a road scene adaptation segmenter by utilizing high-resolution RS images from Google
+Street View in an unsupervised manner, which is well-designed to solve the problem of dataset
+biases across different cities effectively. A novel adversarial learning method was presented in [29]
+for DA in semantic segmentation, where the spatially structural similarity is employed to narrow
+down the gap between data distribution differences of different domains. Tong et al. [30] first
+pre-trained a deep CNN with a well-annotated Gaofen-2 land cover dataset, and transferred the
+trained deep model for the unlabeled RS image classification in the target domain. By contrast,
+Zhu et al. [31] directly learned a transfer network by attempting to align the data distribution
+of subdomains with the utilization of a local maximum mean discrepancy for image classification.
+
+
+                                                 6
+Li et al. [32] proposed a few-shot transfer learning (FSTL) method to improve the generalization
+capability of pre-trained deep CNN on mapping human settlement across countries. Li et al. [33]
+reduced the impact of data shift effectively by designing weakly-supervised constraints, making it
+more suitable for the task of cross-domain RS image semantic segmentation. Moreover, Wang et al.
+[34] contributed to the field by facilitating domain adaptation (DA) in the context of cross-sensor
+VHR urban land cover segmentation, with a focus on accommodating both airborne and spaceborne
+RS images. Further, the same investigators [35] extended their work for semantic segmentation in
+RS by considering local consistency and global diversity to enhance the DA capability.
+   The joint use of multimodal RS data is capable of better mining the representation ability of
+diverse RS modalities, further weakening the effects of data shift to some extent when the model
+is trained on one RS data domain and transferred to another. Hong et al. [36] aimed at the semi-
+supervised transfer learning challenge for cross-scene land cover semantic classification in RS and
+accordingly proposed a cross-modal deep network, called X-ModelNet. The same authors in [37]
+further extended their work with two plug-and-play adversarial modules to enhance the robustness
+and transferability of cross-region RS image semantic segmentation. Similarly, Ji et al. [38] fully
+aligned the source and target domains in the generative adversarial network (GAN) [39] guided
+image space. The style translation technique is utilized to train an end-to-end deep FCN with a
+combination of DA and semantic segmentation from the multi-source RS images to identify the
+different types of land cover elements. Zhao et al. [40] reduced the disparity across scenes by
+using fractional Fourier fusion and spatial-spectral DA techniques for cross-domain multi-source
+RS data classification. These aforementioned methods can be unified into a general multimodal
+deep learning framework for RS image land cover classification (i.e., MDL-RS) on both individual
+and cross-region environments [41].
+   There have recently been certain researches developed by attempts to investigate the feasibility
+and effectiveness of semantic segmentation across regions or cities using multimodal RS images.
+Yet the inadequate integration among high-performance deep semantic segmentation architectures,
+DA networks, and the use of multimodal RS data inevitably leads to the performance bottleneck in
+cross-domain land cover classification. Most importantly, the problems in the lack of multimodal
+RS benchmark datasets become obstacles to the development of urban RS and further decelerate
+the technical progress of scientific research in terms of cross-city semantic segmentation.
+   The follow-up two sections will therefore focus on the solutions to the two above-mentioned
+
+
+                                                  7
+difficulties. Accordingly, one creates large-scale multimodal RS benchmark datasets for the study
+of cross-city semantic segmentation and another brings forth new ideas in the update and upgrade
+of network architecture and blending between multimodal RS data and DA techniques.
+
+
+3. C2Seg: A Multimodal RS Dataset for Cross-City Semantic Segmentation
+
+3.1. Overview
+
+   To overcome the difficulty of multimodal RS data shortage and boost the technological inno-
+vation of urban scene understanding across cities, we build a new collection of multimodal RS
+benchmark datasets, including hyperspectral, multispectral, and SAR data, for research into cross-
+city semantic segmentation (i.e., C2Seg). C2Seg datasets consist of two cross-city scenes as follows.
+
+   • C2Seg-AB: Berlin-Augsburg cities in Germany, which are collected from EnMAP, Sentinel-2,
+      and Sentinel-1 satellite missions on the date as close as possible, and accordingly pre-processed
+      via ESA’s SNAP toolbox.
+
+   • C2Seg-BW: Beijing-Wuhan cities in China, which are collected from Gaofen-5, Gaofen-6, and
+      Gaofen-3 satellite missions on the date as close as possible, and pre-processed using the ENVI
+      software.
+
+   In contrast to certain well-known HR or VHR datasets, such as OpenEarthMap [42], it’s worth
+noting that our C2Seg datasets encompass three distinct RS modalities, even though they maintain
+a GSD of only 10 meters. Furthermore, we are committed to fostering research progress in the
+domain of cross-city semantic segmentation by making the C2Seg datasets openly available for free
+download. These datasets encompass 13 distinct land use and land cover semantic categories1 . To
+the best of our knowledge, this represents a pioneering effort in creating a large-scale benchmark
+dataset tailored for cross-city multimodal RS semantic segmentation, taking into account three
+kinds of RS modalities. The C2Seg datasets will be unfolded in detail as follows.
+
+   1 They   are Urban Fabric, Industrial/Commercial/Transport Units, Mine/Dump/Construction Sites,
+Artificial/Non-Agricultural/Vegetated Areas, Surface Water, Street, Arable Land, Permanent Crops, Pastures,
+Forests, Shrub and/or Herbaceous Vegetation Associations, Open Spaces with Little or Non-Vegetation, and Inland
+Wetlands.
+
+
+
+
+                                                      8
+Figure 1: Visualizing C2Seg-AB datasets for semantic segmentation study scene across Berlin and Augsburg cities
+in Germany using multimodal RS data.
+
+
+3.2. C2Seg-AB
+
+   In C2Seg-AB, the multimodal RS data and labeled semantic categories are prepared across
+Berlin and Augsburg cities in Germany. C2Seg-AB consists of hyperspectral data from EnMAP,
+multispectral data from Sentinel-2, and SAR data from Sentinel-1. Fig. 1 visualizes the C2Seg-AB
+datasets in terms of scene location, image region, and different modalities with ground truth (GT)
+of semantic segmentation.
+   1) EnMAP Hyperspectral Data. Before launching the EnMAP satellite, the simulation
+is the main and widely-used way that obtains the EnMAP-related product, which is synthe-
+sized by using the full-chain automatic simulation tool, i.e., EeteS [43], on the high-resolution
+HyMap or HySpex hyperspectral images. The airborne hyperspectral imaging sensors, i.e., HyMap
+
+
+
+                                                      9
+and HySpex, are used to acquire hyperspectral images over Berlin and Augsburg cities and their
+neighboring areas. Using EeteS, the corresponding EnMAP images can be simulated by HyMap
+and HySpex at a ground sample distance (GSD) of 30m, which are openly available form http:
+//doi.org/10.5880/enmap.2016.002 and https://mediatum.ub.tum.de/1657312, respectively.
+Further, the two hyperspectral images are upsampled to 10m GSD to keep the identically spatial
+resolution of all multimodal RS images in the same studied scene. Therefore, the resulting images
+consist of 2465 × 811 pixels (Berlin) and 886 × 1360 pixels (Augsburg), respectively, and they share
+the same spectral bands (i.e., 242) in the wavelength range of 400nm to 2500nm. More details can
+be found in [44] and [45].
+   2) Sentinel-2 Multispectral Data. The Sentinel-2 mission is composed of two twin-orbit
+satellites (i.e., Sentinel-2A/B) with a combined revisiting time of approximately five days at the
+equator, the spatial, spectral, and temporal resolution, therefore, makes Sentinel-2 well-suited for
+dynamic land cover mapping and monitoring. The Sentinel-2 multispectral sensor covers a total
+of 13 spectral bands ranging from 10m to 60m with different spatial resolutions, and the captured
+spectral reflectance ranges from visible to NIR and SWIR wavelengths. The best pixels in Sentinel-
+2 multispectral composite are used in this work, which has been further processed by the SEPAL
+cloud platform data processing system (sepal.io) of the Food and Agriculture Organization of the
+United Nations (FAO). Furthermore, the Top of Atmosphere (TOA) reflectance was converted to
+surface reflectance, and the best pixels were selected from the past three years as of April 2020
+using a medoid compositing function, where the radiative transfer models are applied in [46] and
+were later adapted to Sentinel-2 by FAO. In our case, 4 spectral bands are selected from Sentinel-2,
+e.g., red, green, blue, and near-infrared (NIR), at a GSD of 10m by following a geographic reference
+of WGS84/UTM Zone 32N.
+   3) Sentinel-1 SAR Data. The SAR component is acquired by the Sentinel-1 mission, which is
+a level-1 Ground Range Detected product obtained by the Interferometric Wide Swath mode. The
+SAR data is characterized by dual-polarized information with VV and VH channels. The SNAP
+toolbox is specially designed by the European Space Agency (ESA) for pre-processing Sentinel-
+1 data to obtain an analysis-ready SAR image, which can be available from the link at https:
+//step.esa.int/main/toolboxes/snap/. The workflow performed in the SNAP toolbox follows
+several steps, i.e., precise orbit profile, radiometric calibration, deburst, speckle reduction, and
+terrain correction. Employing the shuttle radar topography mission, the topographic data are
+
+
+                                                10
+Figure 2: Visualizing C2Seg-BW datasets for semantic segmentation study scene across Beijing and Wuhan cities in
+China using multimodal RS data.
+
+
+generated well. Different from the Sentinel-2 multispectral image, the Sentinel-1 SAR image is not
+strictly sampled to the GSD of 10m. Accordingly, the SAR image is geo-coded to be 10m GSD via
+the bilinear interpolation operator. Finally, the SAR images with two channels, i.e., intensities of
+VV and VH, are aligned with the pixel-wise EnMAP and Sentinel-2 images.
+   4) Ground Truth of Semantic Segmentation. Herein, we label the GT of semantic seg-
+mentation by retrieving land use and land cover (LULC)-labeled data from OpenStreetMap (OSM)
+LULC platform at https://osmlanduse.org/ and 12 main classes well-defined in OSMLULC are
+considered in our case. Accordingly, we manually check the labels within the cities of Berlin and
+Augsburg and also included the major street network from OSM and appended it to the existing
+12 classes, which ensures the granularity and accuracy of the final labeled data. By extending
+those classes defined in [47], we end up with 13 distinct semantic segmentation features, including
+urban, industrial, mine, artificial vegetated, arable land, permanent crops, pastures, forests, shrubs,
+open spaces, inland wetlands, water bodies, and street networks. The elaborately produced LULC
+maps as GT data (i.e., for the purpose of the semantic segmentation task) in our studied areas are
+visualized in color (see Fig. 1).
+
+
+                                                      11
+3.3. C2Seg-BW
+
+   The C2Seg-BW dataset provides multimodal RS data and labeled semantic categories across
+Beijing and Wuhan cities in China, as shown in Fig. 2. Similarly, hyperspectral, multispectral,
+and SAR data are involved in the dataset, which is collected from Gaofen series satellites, such as
+Gaofen-5, Gaofen-6, and Gaofen-3, respectively. The acquisition dates or satellite perigee passing
+time of these modality data are late 2019 and early 2020, which ensures that the ground elements
+remain unchanged as much as possible.
+   1) Gaofen-5 Hyperspectral Data. The Gaofen-5 hyperspectral data is the level-1A product
+collected by the Advanced Hyperspectral Imager (AHSI) [48] from the China Center for Resource
+Satellite Data and Applications (CRESDA). The spatial resolution of the hyperspectral image is
+around 30m with a narrow swath width of approximately 60km, and there are 330 spectral bands
+ranging from 400nm to 2500nm. The spectral resolution in the visible and near-infrared (VNIR)
+region (i.e., 400nm to 1000nm) is about 5nm, while that in the short-wave infrared (SWIR) region
+(i.e., 1000nm to 2500nm) is about 10nm.
+   The hyperspectral images are pre-processed using the ENVI 5.6 software, whose workflow mainly
+includes radiometric calibration, Fast Line-of-sight Atmospheric Analysis of Spectral Hypercubes
+(FLAASH) correction, orthorectification, and bands selection. The band selection operation is
+utilized to massively remove the water vapor absorption, noisy, and bad bands to maintain the
+image quality. The selected 116 bands are further processed by using the Savitzky-Golay filter.
+The resulting hyperspectral images are upsampled from 30m to 10m GSD and they then consist
+of 13474 × 8706 pixels in Beijing and 6225 × 8670 pixels in Wuhan, respectively, with a geographic
+reference of WGS1984 Web Mercator (Auxiliary Sphere).
+   2) Gaofen-6 Multispectral Data. The Gaofen-6 product is acquired by the specially-designed
+camera to collect the panchromatic and multispectral images with spatial resolutions of 2m and
+8m simultaneously. The multispectral data are used in this paper and pre-processed on the ENVI
+platform via the standardized processing flow similar to hyperspectral data. To maintain the con-
+sistency of the spatial resolution, the four spectral bands in the multispectral image are resampled
+to 10m.
+   3) Gaofen-3 SAR Data. The Gaofen-3 product is collected under the Wide Fine Stripmap
+mode, yielding a spatial resolution of 10m with a swath width of 100km. The SAR data are
+prepared by utilizing the functions of de-speckle and terrain correction in the ENVI SARscape
+
+
+                                                12
+Figure 3: Visualizing the comparison for connection modes of feature maps with different resolutions: (a) Series
+Connection and (b) Parallel Connection.
+
+
+Analytics toolbox. The Refined Lee filter [49] with a sliding window size of 5 × 5 pixels is selected
+to remove the speckle noises, and the SAR data are corrected employing global digital elevation
+model (DEM) data in GMTED2010 [50]. Similar to Sentinel-1, we adopt the dual-Pol SAR image
+with HH and HV channels for two studied scenes, and the image size and resolution are the same
+as those of Ganfen-6 multispectral data.
+   4) Ground Truth of Semantic Segmentation. Similar to C2Seg-AB, we retrieve LULC-
+labeled data and major street networks within the cities of Wuhan and Beijing (in China) from
+OSMLULC and OSM, respectively. Herein, we again classify LUCL-labeled data by following the
+class schema defined in [47], which is based on the widely-accepted Corine Land Cover (CLC)
+schema [51]. However, the availability of OSM data in China is insufficient for semantic labeling.
+For this reason, we manually map and complete the LULC features by taking multispectral and
+hyperspectral images as the reference, making it consistent with the labeling schema used in C2Seg-
+AB datasets. The labeled data of 13 distinct classes serve as a piece of ground-truth information
+for the following quantitative analysis of cross-city semantic segmentation tasks throughout this
+paper.
+
+
+4. HighDAN: High-Resolution Domain Adaptation Network
+
+4.1. A Brief Recall of HR-Net
+
+   Convolutional neural networks (CNNs) have been proven to be effective in learning rich repre-
+sentations from images. Many well-known CNNs-based deep network architectures have been put
+forward successively, such as AlexNet [52], VGGNet [53], and GoogleNet [54]. However, there is a
+
+
+                                                      13
+Figure 4: The fusion strategy in HR-Net for feature maps between different resolutions, including the same resolution
+fusion, upsampling fusion, and downsampling fusion.
+
+
+potentially common problem in these backbones, i.e., the resolution of the generated feature maps is
+relatively low when performing the feature extraction by adopting the convolution connection from
+high resolution to low resolution in series. This inevitably leads to the loss of spatial information.
+As a result, the traditional solution to this issue is designing an encoder-decoder architecture, i.e.,
+reducing image resolution via the encoder and restoring to high-resolution representations via the
+decoder. These networks, e.g., U-Net [55], SegNet [17], DeconvNet [56], Hourglass [57], belong to
+the member of the encoder-decoder structure in essence. Nevertheless, this kind of deep network
+architecture tends to generate blurred low-resolution feature maps due to multiple convolution oper-
+ations. These feature maps with different resolutions are further integrated into series connections,
+raising the risk of the loss of edge details and texture information.
+    To overcome the difficulty mentioned above, HR-Net [25] is proposed to generate and maintain
+high-resolution representations. The HR-Net’s increments lie in three-folds as follows.
+
+    • To connect the high-to-low-resolution convolution streams in a parallel fashion instead of
+      previous series connections, as shown in Fig. 3 to visualize their differences.
+
+    • To keep high-resolution representations throughout the whole network architecture.
+
+    • To exchange the information of feature maps across different resolutions, enabling the compact
+      fusion between high- and low-resolutions to enhance the model’s performance. The fusion
+      strategy mainly consists of 1) identity mapping for feature maps with the same resolutions;
+      2) bilinear upsampling plus 1 × 1 convolution for feature maps from low to high-resolutions;
+      3) 3 × 3 stride convolution for feature maps from high to low-resolutions. Fig. 4 illustrates
+      the fusion mode in HR-Net.
+
+
+                                                         14
+Figure 5: An illustrative workflow of the proposed HighDAN for cross-city semantic segmentation, which mainly
+consists of feature extraction head, high-resolution (HR) module, multi-resolution fusion, adversarial domain adap-
+tation, and segmentation head (convolution decoder module).
+
+
+4.2. Method Overview of HighDAN
+
+    Owing to the advancement and superiority of the HR-Net architecture in terms of learning high-
+resolution representations from images, we propose a novel multimodal HR-Net backbone (i.e.,
+HighDAN) with unsupervised domain adaptation for the cross-city semantic segmentation task
+using multimodal RS data. Overall, the HighDAN architecture consists of the multimodal encoder,
+adversarial domain adaptation, and convolution decoder. The design of the domain adaptation
+module aims to bridge the gap between the representations of source and target domains in an
+adversarial learning fashion, thereby fully mining the invariant semantic features from multimodal
+RS data and transferring them across domains. Embedding Dice loss [58] into networks, HighDAN
+is capable of weakening the class imbalance effects that tend to be generated in the case of cross-city
+image interpretation, e.g., semantic segmentation. An illustrative workflow for HighDAN is given
+in Fig. 5.
+
+4.3. Multimodal Encoder
+
+    The multimodal encoder consists of a feature extraction head and a multimodal high-resolution
+(HR) subnetwork. As the name suggests, the feature extraction head learns the preliminary rep-
+resentations for different RS modalities by transformations. The head is comprised of the 3 × 3
+convolution block and four bottleneck blocks. Fig. 6 visualizes the feature extraction head: (a)
+convolution block and (b) bottleneck block. The former convolution block can be formulated as
+
+
+                                              Zk = fWk ,Bk (Xk ),                                              (1)
+
+
+                                                        15
+Figure 6: Clarifying details in the multimodal encoder of HighDAN of (a) convolution block, (b) bottleneck block,
+and (c) HR block, where (a) and (b) form the feature extraction head and (c) is the main body of multimodal HR
+subnetwork.
+
+
+where k is the index (e.g., 1, 2, ...) for different RS modalities, and X and Z denote the input
+modality image and the feature representations via the convolution block, respectively. The function
+f (·), i.e., the convolution block, is unfolded as 3 × 3 convolution operation, batch normalization
+(BN), and ReLU activation function, which is with respect to the network variables of weights W
+and biases B. Given that hyperspectral data typically possesses a significantly higher dimensionality
+compared to multispectral and SAR data, it is common practice to employ dimensionality reduction
+techniques (e.g., PCA) to preprocess the data before feeding it into networks. Additionally, to ensure
+compatibility with the input dimensions of bottleneck blocks, several extra convolutional layers are
+utilized for all input data, facilitating seamless integration within the network architecture. The
+later bottleneck block is expressed by
+
+
+                                             Qk = gWk ,Bk (Zk ),                                             (2)
+
+
+where Q denotes the feature representations via the bottleneck block. The bottleneck block can
+be represented as the function g(·) with respect to the to-be-learned network variables: W and B,
+
+
+                                                       16
+which can be unfolded as 1 × 1 convolution, BN, 3 × 3 convolution, BN, 1 × 1 convolution, and BN
+in sequence. To provide a further explanation, the multimodal encoder in HighDAN initiates with a
+three-stream network architecture that takes as input multimodal RS data, including hyperspectral,
+multispectral, and SAR (see Fig. 5). This architecture is instrumental in elucidating the approach
+used to effectively combine data from diverse RS modalities.
+   The multimodal HR subnetwork well inherits attributes of HR-Net that can extract HR image
+representations. Following the HR-Net, the input RS modality image is firstly downsampled by
+convolution operations with a 2-stride as the main stem. By gradually adding high-to-low-resolution
+streams, feature maps with different resolutions are then connected and fused in parallel to acquire
+diversified resolution representations. The process can be written as
+
+
+                                         Vk = hWk ,Bk (Qk ),                                      (3)
+
+
+where Vk denotes the HR representations of the k-th modality via the multimodal HR subnetwork.
+The function h(·) is defined as the multimodal HR subnetwork by copying the HR module in HR-
+Net [25], which is illustrated in Fig. 6 (c) with HR block. That is, it consists of a multi-resolution
+group convolution and a multi-scale fusion layer. The former refers to a regular convolution for each
+resolution stream over different spatial resolutions separately, and the latter aims to perform an
+interactive fusion of feature maps across scales. It should be noted that the HR module for different
+RS modalities is shared in terms of network parameters to capture the high-quality multimodal
+characteristics more steadily. The outputs from each resolution stream are re-scaled to the same
+resolution as HR representations through bilinear upsampling, achieving the multi-resolution fusion
+via feature stacking.
+
+4.4. Adversarial Domain Adaptation
+   According to the adversarial learning in GAN, the image-to-image translation techniques [59]
+enable the pixel-level alignment and knowledge conversion between source and target domains. This
+further provides possible and potential solutions to the cross-domain semantic segmentation task.
+Prior to conducting DA, it is essential to concatenate all feature maps obtained from the various
+multimodal streams, denoted as V = {Vk }m
+                                        k=1 . This consolidation of feature maps is a crucial step
+
+in the process. Inspired by [60], we adopt two types of DA modules based on the adversarial learning
+strategy to align representations of source and target domains at both feature-level and category-
+
+                                                 17
+Figure 7: A diagram of adversarial domain adaptation used in HighDAN, which consists of feature-level adversarial
+DA and category-level adversarial DA. The pixel-wise attention map is generated by the feature-level adversarial DA
+and explored for reweighing and correcting the feature representations from the target domain, making it compatible
+with features from the source domain. The category-level adversarial DA can further refine the segmentation results.
+
+
+level. On the one hand, the feature-level DA module attempts to reduce biases of cross-domain
+intermediate feature maps (i.e., V ) obtained from the multimodal HR encoder. Herein, pixel-wise
+confidence scores that can reflect the degree of local alignment in different domains are generated
+from the discriminator, which can be used to reweigh the intermediate features V to correct the
+representation shift between different domains locally. This yields the aligned representations as
+A. On the other hand, the category-level DA module aims to enhance global semantic alignment
+from the label distribution perspective, which is used in the final prediction phase. The global
+semantic alignment operation can be regarded as a kind of soft constraint on the category centers,
+which drives the same category closer to each other in different domains. Visually, Fig. 7 gives the
+corresponding diagram of adversarial DA used in HighDAN.
+
+
+4.5. Convolution Decoder
+
+    Given the aligned feature representations A via DA, a segmentation head in the form of the
+convolution decoder is further applied on A to progressively reconstruct feature maps consistent
+with the size of semantic labels, which can be formulated by
+
+
+                                                U = TW ,B (A),                                                  (4)
+
+
+
+
+                                                        18
+ Algorithm 1: A flowchart of the proposed HighDAN
+   Input: Different RS modality data (Xk ) including labeled (source domain, Xks ) and
+           unlabeled (target domain, Xkt ) samples, and semantic segmentation labels (Y )
+           corresponding to labeled samples.
+   Output: Model, predicted segmentation results Ŷ
+ 1 Step 1 (Data preparation): Band-wise normalization for Xk , and feed the normalized
+    data into networks with corresponding labels.
+ 2 Step 2 (Model Training):
+ 3 for t = 1 to T do
+ 4    Part 1: Multimodal Encoder
+ 5        1) Feature Extraction Head:
+ 6            Convolution block: Feature representations Zk obtained by Eq. (1);
+ 7            Bottleneck block: Feature representations Qk obtained by Eq. (2);
+ 8        2) Multimodal HR Head: HR representations Vk obtained by Eq. (3).
+ 9      Part 2: Adversarial Domain Adaptation
+10        1) Feature Concatenation: V = {Vk }mk=1 ;
+11        2) Feature Alignment: Aligned representations A via feature-level DA on V .
+12      Part 3: Convolution Decoder
+13        1) Predict semantic labels U by Eq. (4);
+14        2) Compute the overall loss by Eq. (5);
+15        3) Gradient backpropagation and update networks.
+16   end
+17   Step 3 (Model Inference):
+18     1) Normalize multimodal testing data in a band-wise fashion;
+19     2) Feed the normalized data into learned networks;
+20     3) Obtain the predicted labels and output the final segmentation results.
+
+
+
+where U denotes the predicted semantic label map, and the function T (·) represents the decoder
+module that consists of convolution, BN, ReLU activation function, and 2x upsampling operation.
+
+
+4.6. Model Training
+
+     A flowchart illustrating the proposed HighDAN model is outlined in Algorithm 1, with step-
+by-step procedures provided for clarity. Let X ∈ Rhw×N and Y ∈ Rl×N be the input images and
+the ground truth (GT) of semantic segmentation labels with hw and l dimensions, respectively,
+by N pixels. Then, xi and yi are denoted to be the corresponding i-th element (or pixel). With
+these definitions, the network concerning the to-be-updated parameters of W and B is trained by
+optimizing the following objective function. The overall loss L in objective function is
+
+
+                                       L = Lseg + λLfadv + µLcadv ,                         (5)
+
+
+                                                    19
+where λ and µ are defined as the penalty parameters to balance different terms in the training
+phase, and we set them to be both 0.5 empirically and experimentally. More specifically, the three
+terms are detailed in the following.
+   The first term in Eq. (5) is the segmentation loss, which consists of multi-class cross-entropy
+loss and Dice loss, i.e.,
+                                          Lseg = LM CE + LDice .                                 (6)
+
+LM CE calculates the loss for each pixel equally, and LDice can alleviate the negative effects due to
+the imbalanced training samples, e.g.,
+
+                                                            PN
+                                                        2   i=1 yi ŷi
+                                    LDice = 1 − PN              PN         ,                     (7)
+                                                       i=1 yi +    i=1 ŷi
+
+
+where ŷi denotes the predicted semantic label in the i-th pixel.
+   The second term in Eq. (5) is the feature-level adversarial loss. Unlike the vanilla GAN that
+utilizes the classic cross-entropy loss to train the discriminator, the least square loss in [61] is
+exploited in our DA task to avoid the gradient vanishing issue. Suppose the input modality data
+X s is from the source domain and X t is from the target domain, the generator Ef and discriminator
+Df can be alternatively optimized by minimizing
+
+
+                       Lfadv (Df ) = EX s [(Df (V s ) − 0)2 ] + EX t [(Df (V t ) − 1)2 ],
+                                                                                                 (8)
+                       Lfadv (Ef ) = EX t [(Df (Ef (X t )) − 0)2 ],
+
+where V s and V t are the feature maps (e.g., using Eq. (3)) extracted from the source domain and
+target domain, respectively, via multimodal HR encoder module (collectively known as the generator
+Ef in our case). To ensure the stability of feature maps of the target domain, we optimize V t by
+                            t
+using the updated rule of Vnew = V t + V t ⊙ α, where α denotes the attention map.
+   The third term in Eq. (5) is the category-level adversarial loss. The analogy to the second
+term, the adversary is performed at the category level to improve the global adaptation ability in
+networks. We thus have the following adversarial loss:
+
+
+                       Lcadv (Dc ) = EX s [(Dc (U s ) − 0)2 ] + EX t [(Dc (U t ) − 1)2 ],
+                                                                                                 (9)
+                       Lcadv (Pc ) = EX t [(Dc (Pc (X t )) − 0)2 ],
+
+
+
+                                                      20
+where U s and U t are the output’s decoder maps (e.g., using Eq. (4)) of the source domain and
+target domain via the proposed HighDAN, that is Pc as well.
+
+
+5. Experiments
+
+5.1. Experimental Preparation
+
+5.1.1. Implementation Details
+   The proposed HighDAN is implemented on the PyTorch platform, and all deep models are
+trained using CPU with i7-6850K, RAM with 128GB, and GPU with 11GB NVIDIA GTX1080Ti.
+The Adam [62] is selected as the network optimizer with the iterations of 6000 epochs for C2Seg-AB
+and 10000 epochs for C2Seg-BW, respectively. The learning rates of the segmentation network and
+discriminator are both 0.0001 with a batch size of 16. By cropping the whole scene images with
+the sliding window at certain intervals, we collect 273 (or 7140) and 140 (or 850) images with the
+size of 128 × 128 (or 256 × 256) as a source domain for training and as a target domain for testing,
+respectively, on C2Seg-AB (or C2Seg-BW) datasets.
+
+
+5.1.2. Network Configuration
+   To enable the reconstruction of the proposed semantic segmentation network, we particularize
+the HighDAN architecture layer by layer. HighDAN successively starts with convolution blocks,
+and four bottleneck blocks are connected. Behind it, three feature encoding modules are adopted,
+each consisting of four basic HR blocks. The convolution decoder module is finally added with
+the combination of four decoding blocks. Between the two modules, an adversarial block and a
+concatenation-based fusion layer are embedded. For more details, the layer-wise network configu-
+ration of HighDAN is listed in Table 1.
+
+
+5.1.3. Evaluation Metrics
+   We evaluate the cross-city semantic segmentation performance qualitatively and quantitatively
+in terms of three metrics in common use: overall accuracy (OA), mean intersection over union
+(mIoU), and mean F1 score (mF1). OA, also known as pixel accuracy (PA), collects each pixel
+prediction:
+                                                Pl
+                                                   i=1 pii
+                                      OA = Pl      Pl         ,                                (10)
+                                               i=1    j=1 pij
+
+
+
+
+                                                21
+Table 1: Layer-wise network configuration of the proposed HighDAN. Conv, BN, HR, and Num are abbreviations of
+convolution, batch normalization, high resolution, and number, respectively.
+
+                                      Hyperspectral          Multispectral             SAR         Output Dimension
+                                        3 × 3 Conv            3 × 3 Conv            3 × 3 Conv
+                                            BN                    BN                    BN
+                                           ReLU                  ReLU                  ReLU
+          Convolution Block                                                                               64
+                                        3 × 3 Conv                 –                     –
+                                            BN                     –                     –
+                                           ReLU                    –                     –
+          Bottleneck Module         Bottleneck Block∗4    Bottleneck Block∗4 Bottleneck Block∗4           48
+                                    Basic HR Block∗4      Basic HR Block∗4      Basic HR Block∗4
+         Feature Encoding 1                                                                             48/96
+                                       Sum Fusion            Sum Fusion             Sum Fusion
+                                    Basic HR Block∗4      Basic HR Block∗4      Basic HR Block∗4
+         Feature Encoding 2                                                                           48/96/192
+                                       Sum Fusion            Sum Fusion             Sum Fusion
+                                    Basic HR Block∗4      Basic HR Block∗4      Basic HR Block∗4
+         Feature Encoding 3                                                                         48/96/192/384
+                                       Sum Fusion            Sum Fusion             Sum Fusion
+           Fusion Layer                                 Feature Concatenation                           720∗3
+         Adversarial Module               Output the attention scores to reweigh feature maps           720∗3
+                                                              3 × 3 Conv
+                                                                  BN                                     256
+                                                                 ReLU
+                                                              3 × 3 Conv
+                                                                  BN                                     128
+                                                                 ReLU
+                                                              3 × 3 Conv
+                                                                  BN                                      64
+     Convolution Decoder Module
+                                                                 ReLU
+                                                       Transposed Convolution
+                                                                                                     Num of Class
+                                                              1 × 1 Conv
+
+
+
+where i, j, and l represent the real value, predicted value, and the total number of classes, respec-
+tively, and the pij denotes the number of pixels that predict the i-th class as the j-th class. mIoU
+computes the intersection and union of two sets, which is defined by
+
+                                                  l
+                                               1X              pii
+                                  mIoU =                                       .                                      (11)
+                                               l i=1 lj=1 pij + lj=1 pji − pii
+                                                    P          P
+
+
+mF1 score is the harmonic mean of precision (P ) and recall (R), which is given by
+
+                                                         1 2×P ×R
+                                               mF 1 =      ×      ,                                                   (12)
+                                                         l   P +R
+
+where
+                                    l                                 l
+                                    X           pii                   X          pii
+                              P =         Pl                ,    R=         Pl               .                        (13)
+                                    i=1     j=1 pij + pii             i=1    j=1 pji + pii
+
+
+
+
+                                                            22
+Table 2: Quantitative performance comparison of deep semantic segmentation networks in terms of OA, mIoU, mF1,
+and F1 scores for each class as well as the model’s computational complexity (FLOPs) and parameters on C2Seg-AB
+datasets. The symbol ‘–’ denotes no pixels correctly identified. The best result is marked in bold.
+
+ Class Name                              DeepLab   SegNet   FastFCN   AdaptSeg   DSAN     DualHR   SegFormer   HighDAN
+ Surface water                             0.31     18.53     24.24    22.96     12.20     38.49     37.45      52.06
+ Street network                            9.54      3.00     13.00    13.61      5.80     20.98      0.79      21.35
+ Urban fabric                             56.58     58.08     60.75    66.00      71.66    62.73     69.84      72.52
+ Industrial, commercial, and transport    35.86     39.88     41.48    42.99      26.15    48.13     57.98      62.37
+ Mine, dump, and construction sites         –        5.72      6.30     6.90      15.96    17.72     22.32       21.95
+ Artificial vegetated areas               25.35      0.33     16.21    19.11      24.38    18.01     26.56      33.41
+ Arable land                              53.28     58.34     48.01    48.47      55.85    61.14     53.91      65.92
+ Permanent crops                            –          –         –        –         –        –          –        1.17
+ Pastures                                  1.69     34.91      8.02     0.83     21.49      0.23     35.97      37.87
+ Forests                                  62.85     34.20     51.47    53.43      65.72    53.52     70.87      74.35
+ Shrub                                     0.59      1.60      0.39    11.23     17.64      2.34      5.06       14.51
+ Open spaces with no vegetation             –          –         –        –         –        –          –          –
+ Inland wetlands                            –          –         –        –         –        –          –          –
+ OA (%)                                   42.46     43.40     43.51    44.53      47.68    48.05     53.40      57.66
+ mIoU (%)                                 12.64     12.65     13.33    14.30      16.33    16.49     20.16      24.76
+ mF1 (%)                                  18.93     19.59     20.76    21.96      24.37    24.87     29.29      35.19
+ FLOPs (B) / GFLOPs                       56.42     30.53     38.58    38.34      53.67    37.46      5.82       40.11
+ Params (M)                               72.68     29.48     56.70    44.86     107.44    15.33     28.97       16.55
+
+
+
+5.1.4. Comparison with State-of-the-art Models
+   We select current state-of-the-art (SOTA) semantic segmentation models for qualitative and
+quantitative performance comparison using multimodal RS data in the cross-city case. They are
+DeepLabv3 [23], SegNet [17], FastFCN [16], AdaptSeg [29], deep subdomain adaptation network
+(DSAN) [31], Dual-stream HR-Net (DualHR) [24], SegFormer [12], and our proposed HighDAN.
+The [23], [17], [16], [24] and [12] models fail to consider data shifts between different domains, while
+the rest effectively embed the DA strategy into networks. It is worth noting that we prioritize
+using the same network configurations (given in the original literature) for compared approaches.
+Further, the relevant parameters can be slightly adjusted, making it applicable to the segmentation
+experiments of multimodal RS data.
+
+
+5.2. Quantitative Evaluation on C2Seg Datasets
+
+   Tables 2 and 3 quantify the cross-city semantic segmentation performance by comparing current
+SOTA deep models with our HighDAN in terms of pixel-wise OA, mIoU, mF1, and F1 scores for
+each class as well as the model’s computational complexity (FLOPs) and parameters on C2Seg
+datasets (C2Seg-AB and C2Seg-BW, respectively).
+   By and large, the cross-city segmentation performance of deep networks without the consider-
+ation of data shifts across domains (e.g., DeepLabv3, SegNet) is inferior to that of those models
+
+
+                                                            23
+Table 3: Quantitative performance comparison of deep semantic segmentation networks in terms of OA, mIoU, mF1,
+and F1 scores for each class as well as the model’s computational complexity (FLOPs) and parameters on C2Seg-BW
+datasets. The symbol ‘–’ denotes no pixels correctly identified. The best result is marked in bold.
+
+ Class Name                              DeepLab   SegNet   FastFCN   AdaptSeg   DSAN     DualHR    SegFormer   HighDAN
+ Surface water                             50.42    37.87     45.39     59.57       –       60.51     78.49       78.37
+ Street network                            16.30     6.17      2.38    17.05        –       0.29       0.05        0.58
+ Urban fabric                              33.75    34.86     38.44     25.06    42.08      0.76      30.90       40.04
+ Industrial, commercial, and transport     2.48      1.87     27.63    32.77     25.68     24.19      20.38      43.67
+ Mine, dump, and construction sites        1.70      1.36      0.86     1.94       1.22      0.26      2.52        1.67
+ Artificial vegetated areas                8.97      2.23      8.83     8.99      9.55      4.19      10.79        9.28
+ Arable land                                 –      16.23        –       9.11    25.37        –       18.01        0.43
+ Permanent crops                             –       1.57        –       0.30       –         –        1.77        0.10
+ Pastures                                    –         –         –         –         –        –          –          –
+ Forests                                   1.68     13.31      4.14    32.98     46.85     32.70      38.72      47.22
+ Shrub                                     0.72        –         –         –         –      0.22      10.48        0.26
+ Open spaces with no vegetation              –         –         –         –         –      0.33       0.01         –
+ Inland wetlands                             –         –         –         –         –      0.01       0.01         –
+ OA (%)                                    19.51    15.94     21.22     29.26     18.55     31.97     33.56      39.58
+ mIoU (%)                                  5.45      5.17      5.96     8.92      7.09      6.17      10.89      11.92
+ mF1 (%)                                   8.92      8.88      9.82    14.44     11.60      9.53      16.32      17.69
+ FLOPs (B) / GFLOPs                       213.01   122.13    154.32    144.58    214.67    149.86     23.30      160.45
+ Params (M)                                72.68    29.48     56.70     44.86    107.44    15.33      28.97       16.55
+
+
+
+that effectively embed the DA strategy into networks. SegNet shows comparable performance with
+DeepLabv3 in terms of OA, mIoU, and mF1 on C2Seg-AB Datasets, while SegNet and DeepLabv3
+hold similar segmentation accuracies on C2Seg-BW Datasets. For those DA-guided segmentation
+networks, the adversarial DA methods (e.g., FastFCN, AdaptSeg) show competitive results com-
+pared to DSAN based on the local maximum mean discrepancy. Although FastFCN and AdaptSeg
+perform moderately lower than DSAN at an average decrease of 3%∼4% OAs, 2%∼3% mIoUs, and
+2%∼4% mF1s, respectively, yet their F1 scores for each category are holistically comparable to
+DSANs’ and the main differences lie in certain special categories, e.g., Pastures, Forests, Shrub, etc.
+on the C2Seg-AB datasets. It is important to note that when confronted with more complex and
+extensive datasets e.g., C2Seg-BW, the generalization capability of DSAN appears to be somewhat
+constrained in comparison to FastFCN and AdaptSeg.
+   Furthermore, the HR-Net backbone architecture can offer greater potential for extracting a
+wealth of semantic information from multimodal RS data in comparison with the CNNs-based
+backbone in the semantic segmentation task. For example, DualHR brings increments of 13% OA
+based on DSAN on C2Seg-BW datasets, but the performance is basically identical to those on
+C2Seg-AB datasets, compared to DSAN. However, it is essential to note that transformer-based
+methods (i.e., SegFormer) consistently demonstrate competitive and stable performance on both
+
+
+
+                                                            24
+Figure 8: Visualization of semantic segmentation results obtained by successively using DeepLab, SegNet, FastFCN,
+AdaptSeg, DSAN, DualHR, SegFormer, and our proposed HighDAN on C2Seg-AB (testing set: Berlin) datasets.
+
+
+
+C2Seg datasets, achieving the second-highest results across all evaluation indices. Not unexpectedly,
+the proposed HighDAN achieves the best segmentation performance by 4.26%, 4.60%, and 5.90%
+gains in OA, mIoU, and mF1 (cf. SegFormer) on C2Seg-AB datasets, while there is also a nearly
+similar trend, even higher performance (e.g., over 6% OA increase), on C2Seg-BW datasets. A
+more noteworthy point to demonstrate the superiority of HighDAN lies in that HighDAN obtains
+the highest F1 scores in many dominated categories, e.g., Surface water, Street network, Urban
+fabric, Arable land, Forests, etc. on either C2Seg-AB or C2Seg-BW datasets. We have to admit,
+however, that C2Seg is a very challenging semantic segmentation dataset. It is observed that some
+categories are hardly identified, that is, the segmentation results for certain classes are 0% and few
+are approximately close to 0%.
+
+
+5.3. Visual Comparison on C2Seg Datasets
+
+   Figs. 8 and 9 visualize the segmentation maps of eight different algorithms in terms of 13
+semantic categories for the whole scenes of Berlin city and Wuhan city on C2Seg datasets. There
+is a more significant visual difference between predicted segmentation results and GT (on both
+Berlin and Wuhan scenes) in DeepLab and SegNet. On the one hand, Pastures are prone to be
+wrongly classified as Arable land, while Inland Wetlands are heavily identified to be Forests in
+
+
+                                                       25
+Figure 9: Visualization of semantic segmentation results obtained by successively using DeepLab, SegNet, FastFCN,
+AdaptSeg, DSAN, DualHR, SegFormer, and our proposed HighDAN on C2Seg-BW (testing set: Wuhan) datasets.
+
+
+
+the Wuhan scene. On the other hand, Urban fabric and Industrial, commercial, and transport are
+easily confused due to their similar spectral characteristics and functions. Compared to the first
+two methods, FastFCN has visible advantages in discriminating the semantic category of Urban
+Fabric and Artificial vegetated areas, while AdaptSeg is capable of identifying Arable Land more
+accurately (despite the over-recognition of Shrub and Pastures being Arable Land ). We have to
+admit, however, that the ability of AdaptSeg to classify urban-related semantic elements remains
+limited. DSAN is a good recognizer for urban-related and vegetation semantic categories, which
+can well distinguish Urban fabric and Industrial, commercial, and transport as well as Forests and
+Arable land. In the family of HR-Net, DualHR is sensitive to capturing water bodies from a big
+urban scene but fails to detect urban accurately, while the proposed HighDAN visually shows, as
+expected, comparatively realistic segmentation maps closer to GT (cf. SegFormer). In particular,
+water bodies, urban, and forests have nearly identical semantic segmentation profiles to those in
+GT. There is, notwithstanding, considerable room for improvement in HighDAN, to further enhance
+the identification and recognition ability in Arable Land, Street Network, and Inland Wetlands.
+   In addition to the scene-wide segmentation visualization, we also provide detailed segmentation
+results in sub-regions, as shown in Figs. 10 and 11 corresponding to Figs. 8 and 9, respectively. The
+
+
+
+                                                       26
+Figure 10: Visualizing semantic segmentation results of sub-regions corresponding to Fig. 8 for all compared models.
+
+
+visual comparison of local semantic segmentation results highlights the advantages of the proposed
+HighDAN in terms of preserving fine-grained details of objects in RS images. Further, HighDAN is
+capable of effectively capturing small-scale features and details of the objects. This was particularly
+evident in the cases of man-made objects with intricate shapes and textures, where HR-Net-based
+models (i.e., DualHR, HighDAN) are apt to segment the objects without losing important details.
+
+
+                                                        27
+Figure 11: Visualizing semantic segmentation results of sub-regions corresponding to Fig. 9 for all compared models.
+
+
+In comparison, the baseline methods, such as DeepLab and SegNet, yield segmentation results with
+a severe loss of detailed information, which shows their limitations in capturing tiny and irregu-
+lar objects or structures. While other compared methods have demonstrated some improvement
+in identifying semantic categories with varying shapes, their ability in recognition accuracy and
+boundary segmentation remains limited. Yet the visual analysis also reveals that our HighDAN
+
+
+                                                        28
+      Figure 12: Visualization of class activation maps (CAMs) using HighDAN on the C2Seg-AB datasets.
+
+
+can effectively adapt to changes in imaging conditions and variability in object appearance across
+domains or cities, resulting in improved segmentation accuracy and robustness. It should be noted,
+however, that some categories are almost entirely misclassified in certain sub-images, such as Ar-
+tificial vegetated areas, Open spaces with no vegetation, Inland wetlands, Shrub. To sum up, these
+observations highlight the need for continued exploration and optimization of semantic segmentation
+methods in the aspects of HR feature extraction and DA enhancement.
+   To further assess the effectiveness of our proposed HighDAN model in extracting class-related
+semantic information, we visualize class activation maps (CAMs) [63] on the C2Seg-AB datasets,
+as shown in Fig. 12. These visualizations demonstrate that HighDAN excels in capturing high-level
+semantic information with precise class activation, even for small classes, e.g., Street Network. This
+capability underscores the model’s proficiency in semantic segmentation tasks.
+
+
+5.4. Ablation Study
+
+   The proposed HighDAN takes the multimodal HR-Net as the network backbone, which consists
+of several key modules, such as multimodal HR encoder (Bottleneck + HR), DA (Feature-level
+
+
+                                                    29
+Table 4: Ablation analysis on C2Seg-AB datasets, where ‘Bottleneck’ and ‘HR’ represent the bottleneck feature
+extraction module and the high-resolution module, while ‘Feature DA’ and ‘Category DA’ denote feature-level domain
+adaptation module and category-level domain adaptation module, respectively. The best results are marked in bold.
+
+  Model        Bottleneck    HR    Feature DA     Category DA     Dice Loss    OA (%)     mIoU (%)     mF1 (%)
+  SegNet           ✗          ✗         ✗              ✗              ✗         43.40       12.65       19.59
+  HR-Net           ✗         ✓          ✗              ✗              ✗         48.53       15.86       23.35
+  HR-Net           ✓         ✓          ✗              ✗              ✗         49.85       18.95       27.80
+  HR-Net           ✓         ✓          ✗              ✗              ✓         50.59       19.90       29.04
+  HighDAN          ✓         ✓          ✗              ✓              ✓         53.74       20.62       29.84
+  HighDAN          ✓         ✓         ✓               ✗              ✓         52.73       21.51       31.09
+  HighDAN          ✓         ✓         ✓               ✓              ✗         56.44       24.03       34.32
+  HighDAN          ✓         ✓         ✓               ✓              ✓         57.66      24.76        35.19
+
+
+
+DA + Category-level), and Dice loss. To evaluate the importance of these modules for cross-city
+semantic segmentation using multimodal RS data, we implement the ablation study on C2Seg-AB
+datasets. Table 4 details the performance gain by combining different components in terms of OA,
+mIoU, and mF1.
+   SegNet follows the classic encoder-decoder backbone and serves as the baseline (without any
+advanced components involved), yielding relatively poor segmentation performance. By integrat-
+ing the bottleneck and the advanced HR feature extractor, HR-Net significantly improves at an
+increment of 6.45% OA, 6.30% mIoU, and 8.21% mF1. With the Dice loss, HR-Net considers
+the class imbalance issue and shows competitive results, but without DA, it inevitably meets the
+performance bottleneck in the cross-city task. The adversarial DA strategy bridges the gap across
+domains effectively from feature-level and category-level perspectives. HighDAN demonstrated a
+noteworthy improvement in OA, with a substantial 6% enhancement over HR-Net, and exhibited
+remarkable increases of approximately 5% in the pivotal semantic segmentation metrics, i.e., mIoU
+and mF1. Notably, balancing samples of different categories via Dice loss also plays a prominent
+role in HighDAN. As can be seen from Table 4, HighDAN with Dice loss can further improve the
+cross-city semantic segmentation performance by at least 1.2% OA based on that without the loss.
+We also present results that facilitate a comparison between scenarios involving HS data and those
+without HS data in terms of OA, mIoU, and mF1: (57.66%, 35.19%, 24.76%) vs. (53.91%, 31.81%,
+21.74%).
+   In addition, we presented the results, which included training loss, OA, mIoU, and mF1, for
+individual datasets using an 8:2 training and testing ratio, specifically focusing on C2Seg-AB.
+
+
+
+                                                       30
+Figure 13: Performance analysis of the proposed HighDAN in robustness in terms of training loss, OA, mIoU, and
+mF1 score on the individual C2Seg-AB datasets.
+
+
+This comprehensive evaluation process allowed us to assess the performance and robustness of
+the proposed HighDAN model. Fig. 13 illustrates that the training loss of the model exhibits a
+consistent decrease throughout the training process, indicating the model’s stability and robust
+convergence during learning. As expected, there is a similar trend in segmentation performance
+(i.e., OA, mIoU, mF1) across individual C2Seg-AB datasets.
+
+
+6. Conclusion
+
+   Fast monitoring and understanding of urban environments are inseparable from explosively de-
+veloping RS techniques. The success of RS enables the accurate identification and detection of
+materials of interest in complex urban scenes. As a primary and indispensable research topic, the
+semantic segmentation of RS images has long dominated the overwhelming role in the land use land
+cover classification of urban environments. However, these well-designed and dedicated segmenta-
+tion methodologies are, for the most part, applicable only to one single city case. This severely
+hinders the application deployments across cities or regions, since urban planning and manage-
+ment, e.g., policy-making, land use, spatial layout, information transfer, etc., have to accommodate
+multi-city studies.
+   For the reason mentioned above, we in this paper focus on investigating cross-city semantic
+segmentation and provide solutions accordingly. The solutions are two-fold. On the one hand, we
+build a multimodal RS benchmark dataset (i.e., C2Seg) to solve the issue of insufficient discrim-
+inative information by only using single modality RS data for cross-city semantic segmentation.
+On the other hand, we propose a cutting-edge deep network architecture, HighDAN for short,
+by embedding the adversarial learning-based DA’s idea into HR-Net with Dice Loss (to reduce the
+effects of the class imbalance), making it largely possible to break the semantic segmentation perfor-
+
+
+                                                     31
+mance bottleneck in terms of accuracy and generalization ability from cross-city studies. Extensive
+experiments conducted on the C2Seg datasets demonstrate that our HighDAN achieves the best
+segmentation performance, which beats other SOTA competitors in almost all important indices.
+Moreover, we will also release the C2Seg benchmark datasets and the corresponding source codes,
+contributing to the interpretation research of urban environments across cities.
+   In future work, we aim to extend the C2Seg datasets in a wide range of cities on a national
+scale and even a global scale for the better study of cross-city semantic segmentation. In particular,
+the development of hyperspectral RS, especially concerning its application on a large scale, is
+indeed an issue that warrants urgent attention and exploration, due to certain inherent imaging
+constraints associated with hyperspectral RS technology. Furthermore, more advanced AI models
+should be developed and made accessible by further considering explicit and explainable knowledge
+embedding, e.g., geometric priors, climate characteristics, and urban morphological properties, to
+guide deep networks to learn more accurate segments and promote the model’s generalization ability
+across cities.
+
+
+Acknowledgements
+
+   The authors would like to thank Ms. Zhu Han and Ms. Luyang Cai for pre-processing the Gaofen
+data used in this paper. This work was supported by the National Key Research and Development
+Program of China under Grant 2022YFB3903401, the National Natural Science Foundation of China
+under Grant 42241109 and Grant 42271350, the MIAI@Grenoble Alpes (ANR-19-P3IA-0003), the
+Klaus Tschira Stiftung (KTS) Heidelberg, and the AXA Research Fund.
+
+
+
+
+                                                 32
+References
+
+[1] Q. Yuan, H. Shen, T. Li, Z. Li, S. Li, Y. Jiang, H. Xu, W. Tan, Q. Yang, J. Wang, et al., Deep
+   learning in environmental remote sensing: Achievements and challenges, Remote Sensing of
+   Environment 241 (2020) 111716.
+
+[2] X. Yuan, J. Shi, L. Gu, A review of deep learning methods for semantic segmentation of remote
+   sensing imagery, Expert Systems with Applications 169 (2021) 114417.
+
+[3] M. Kampffmeyer, A.-B. Salberg, R. Jenssen, Semantic segmentation of small objects and
+   modeling of uncertainty in urban remote sensing images using deep convolutional neural net-
+   works, in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition
+   Workshops, 2016, pp. 1–9.
+
+[4] Y. Gal, Z. Ghahramani, Dropout as a bayesian approximation: Representing model uncertainty
+   in deep learning, in: Proceedings of the International Conference on Machine Learning (ICML),
+   PMLR, 2016, pp. 1050–1059.
+
+[5] R. Kemker, C. Salvaggio, C. Kanan, Algorithms for semantic segmentation of multispectral
+   remote sensing imagery using deep learning, ISPRS Journal of Photogrammetry and Remote
+   Sensing 145 (2018) 60–77.
+
+[6] Y. Yi, Z. Zhang, W. Zhang, C. Zhang, W. Li, T. Zhao, Semantic segmentation of urban
+   buildings from vhr remote sensing imagery using a deep convolutional neural network, Remote
+   sensing 11 (2019) 1774.
+
+[7] F. I. Diakogiannis, F. Waldner, P. Caccetta, C. Wu, Resunet-a: A deep learning framework
+   for semantic segmentation of remotely sensed data, ISPRS Journal of Photogrammetry and
+   Remote Sensing 162 (2020) 94–114.
+
+[8] S. Du, S. Du, B. Liu, X. Zhang, Mapping large-scale and fine-grained urban functional zones
+   from vhr images using a multi-scale semantic segmentation network and object based approach,
+   Remote Sensing of Environment 261 (2021) 112480.
+
+[9] L. Wang, R. Li, C. Zhang, S. Fang, C. Duan, X. Meng, P. M. Atkinson, Unetformer: A unet-
+   like transformer for efficient semantic segmentation of remote sensing urban scene imagery,
+   ISPRS Journal of Photogrammetry and Remote Sensing 190 (2022) 196–214.
+
+
+                                               33
+[10] X. He, Y. Zhou, J. Zhao, D. Zhang, R. Yao, Y. Xue, Swin transformer embedding unet for
+    remote sensing image semantic segmentation, IEEE Transactions on Geoscience and Remote
+    Sensing 60 (2022) 1–15.
+
+[11] Z. Wang, Q. Wang, Y. Yang, N. Liu, Y. Chen, J. Gao, Seismic facies segmentation via a
+    segformer-based specific encoder–decoder–hypercolumns scheme, IEEE Transactions on Geo-
+    science and Remote Sensing 61 (2023) 1–11.
+
+[12] E. Xie, W. Wang, Z. Yu, A. Anandkumar, J. M. Alvarez, P. Luo, Segformer: Simple and
+    efficient design for semantic segmentation with transformers, Advances in Neural Information
+    Processing Systems 34 (2021) 12077–12090.
+
+[13] M. Dalla Mura, S. Prasad, F. Pacifici, P. Gamba, J. Chanussot, J. A. Benediktsson, Challenges
+    and opportunities of multimodality and data fusion in remote sensing, Proceedings of the IEEE
+    103 (2015) 1585–1601.
+
+[14] N. Audebert, B. L. Saux, S. Lefèvre, Semantic segmentation of earth observation data us-
+    ing multimodal and multi-scale deep networks, in: Proceedings of the Asian Conference on
+    Computer Vision (ACCV), Springer, 2016, pp. 180–196.
+
+[15] J. Long, E. Shelhamer, T. Darrell, Fully convolutional networks for semantic segmentation, in:
+    Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR),
+    2015, pp. 3431–3440.
+
+[16] H. Wu, J. Zhang, K. Huang, K. Liang, Y. Yu, Fastfcn: Rethinking dilated convolution in the
+    backbone for semantic segmentation, arXiv preprint arXiv:1903.11816 (2019).
+
+[17] V. Badrinarayanan, A. Kendall, R. Cipolla, Segnet: A deep convolutional encoder-decoder
+    architecture for image segmentation, IEEE Transactions on Pattern Analysis and Machine
+    Intelligence 39 (2017) 2481–2495.
+
+[18] N. Audebert, B. Le Saux, S. Lefèvre, Beyond rgb: Very high resolution urban remote sensing
+    with multimodal deep networks, ISPRS journal of photogrammetry and remote sensing 140
+    (2018) 20–32.
+
+
+
+
+                                                34
+[19] D. Hong, L. Gao, R. Hang, B. Zhang, J. Chanussot, Deep encoder-decoder networks for
+    classification of hyperspectral and lidar data, IEEE Geoscience and Remote Sensing Letters
+    (2020).
+
+[20] M. Wieland, Y. Li, S. Martinis, Multi-sensor cloud and cloud shadow segmentation with a
+    convolutional neural network, Remote Sensing of Environment 230 (2019) 111203.
+
+[21] M. Wurm, T. Stark, X. X. Zhu, M. Weigand, H. Taubenböck, Semantic segmentation of slums
+    in satellite images using transfer learning on fully convolutional neural networks, ISPRS journal
+    of photogrammetry and remote sensing 150 (2019) 59–69.
+
+[22] M. Segal-Rozenhaimer, A. Li, K. Das, V. Chirayath, Cloud detection algorithm for multi-modal
+    satellite imagery using convolutional neural networks (cnn), Remote Sensing of Environment
+    237 (2020) 111446.
+
+[23] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, A. L. Yuille, Deeplab: Semantic image
+    segmentation with deep convolutional nets, atrous convolution, and fully connected crfs, IEEE
+    Transactions on Pattern Analysis and Machine Intelligence 40 (2017) 834–848.
+
+[24] B. Ren, S. Ma, B. Hou, D. Hong, J. Chanussot, J. Wang, L. Jiao, A dual-stream high resolution
+    network: Deep fusion of gf-2 and gf-3 data for land cover classification, International Journal
+    of Applied Earth Observation and Geoinformation 112 (2022) 102896.
+
+[25] K. Sun, B. Xiao, D. Liu, J. Wang, Deep high-resolution representation learning for human
+    pose estimation, in: Proceedings of the IEEE Conference on Computer Vision and Pattern
+    Recognition (CVPR), 2019, pp. 5693–5703.
+
+[26] B. Adriano, N. Yokoya, J. Xia, H. Miura, W. Liu, M. Matsuoka, S. Koshimura, Learning from
+    multimodal and multitemporal earth observation data for building damage mapping, ISPRS
+    Journal of Photogrammetry and Remote Sensing 175 (2021) 132–143.
+
+[27] Y. Ganin, V. Lempitsky, Unsupervised domain adaptation by backpropagation, in: Pro-
+    ceedings of the International Conference on Machine Learning (ICML), PMLR, 2015, pp.
+    1180–1189.
+
+
+
+
+                                                35
+[28] Y.-H. Chen, W.-Y. Chen, Y.-T. Chen, B.-C. Tsai, Y.-C. Frank Wang, M. Sun, No more
+    discrimination: Cross city adaptation of road scene segmenters, in: Proceedings of the IEEE
+    International Conference on Computer Vision (ICCV), 2017, pp. 1992–2001.
+
+[29] Y.-H. Tsai, W.-C. Hung, S. Schulter, K. Sohn, M.-H. Yang, M. Chandraker, Learning to adapt
+    structured output space for semantic segmentation, in: Proceedings of the IEEE Conference
+    on Computer Vision and Pattern Recognition (CVPR), 2018, pp. 7472–7481.
+
+[30] X.-Y. Tong, G.-S. Xia, Q. Lu, H. Shen, S. Li, S. You, L. Zhang, Land-cover classification
+    with high-resolution remote sensing images using transferable deep models, Remote Sensing
+    of Environment 237 (2020) 111322.
+
+[31] Y. Zhu, F. Zhuang, J. Wang, G. Ke, J. Chen, J. Bian, H. Xiong, Q. He, Deep subdomain adap-
+    tation network for image classification, IEEE Transactions on Neural Networks and Learning
+    Systems 32 (2021) 1713–1722.
+
+[32] H. Li, B. Herfort, S. Lautenbach, J. Chen, A. Zipf, Improving openstreetmap missing building
+    detection using few-shot transfer learning in sub-saharan africa, Transactions in GIS 26 (2022)
+    3125–3146.
+
+[33] Y. Li, T. Shi, Y. Zhang, W. Chen, Z. Wang, H. Li, Learning deep semantic segmentation
+    network under multiple weakly-supervised constraints for cross-domain remote sensing image
+    semantic segmentation, ISPRS Journal of Photogrammetry and Remote Sensing 175 (2021)
+    20–33.
+
+[34] J. Wang, A. Ma, Y. Zhong, Z. Zheng, L. Zhang, Cross-sensor domain adaptation for high
+    spatial resolution urban land-cover mapping: From airborne to spaceborne imagery, Remote
+    Sensing of Environment 277 (2022) 113058.
+
+[35] A. Ma, C. Zheng, J. Wang, Y. Zhong, Domain adaptive land-cover classification via local
+    consistency and global diversity, IEEE Transactions on Geoscience and Remote Sensing (2023).
+
+[36] D. Hong, N. Yokoya, G.-S. Xia, J. Chanussot, X. X. Zhu, X-modalnet: A semi-supervised deep
+    cross-modal network for classification of remote sensing data, ISPRS Journal of Photogram-
+    metry and Remote Sensing 167 (2020) 12–23.
+
+
+
+                                               36
+[37] D. Hong, J. Yao, D. Meng, Z. Xu, J. Chanussot, Multimodal gans: Toward crossmodal
+    hyperspectral–multispectral image segmentation, IEEE Transactions on Geoscience and Re-
+    mote Sensing 59 (2021) 5103–5113.
+
+[38] S. Ji, D. Wang, M. Luo, Generative adversarial network-based full-space domain adaptation
+    for land cover classification from multiple-source remote sensing images, IEEE Transactions
+    on Geoscience and Remote Sensing 59 (2021) 3816–3828.
+
+[39] I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley, S. Ozair, A. Courville,
+    Y. Bengio, Generative adversarial networks, Communications of the ACM 63 (2020) 139–144.
+
+[40] X. Zhao, M. Zhang, R. Tao, W. Li, W. Liao, W. Philips, Cross-domain classification of
+    multisource remote sensing data using fractional fusion and spatial-spectral domain adaptation,
+    IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 15 (2022)
+    5721–5733.
+
+[41] D. Hong, L. Gao, N. Yokoya, J. Yao, J. Chanussot, Q. Du, B. Zhang, More diverse means better:
+    Multimodal deep learning meets remote-sensing imagery classification, IEEE Transactions on
+    Geoscience and Remote Sensing 59 (2021) 4340–4354.
+
+[42] J. Xia, N. Yokoya, B. Adriano, C. Broni-Bediako, Openearthmap: A benchmark dataset
+    for global high-resolution land cover mapping, in: Proceedings of the IEEE/CVF Winter
+    Conference on Applications of Computer Vision, 2023, pp. 6254–6264.
+
+[43] K. Segl, L. Guanter, C. Rogass, T. Kuester, S. Roessner, H. Kaufmann, B. Sang, V. Mogulsky,
+    S. Hofer, EeteS-—The EnMAP end-to-end simulation tool, IEEE Journal of Selected Topics
+    in Applied Earth Observations and Remote Sensing 5 (2012) 522–530.
+
+[44] A. Okujeni, S. van der Linden, P. Hostert, Berlin-urban-gradient dataset 2009-an enmap
+    preparatory flight campaign (2016).
+
+[45] J. Hu, R. Liu, D. Hong, A. Camero, J. Yao, M. Schneider, F. Kurz, K. Segl, X. X. Zhu, Mdas:
+    A new multimodal benchmark dataset for remote sensing, Earth System Science Data 15
+    (2023) 113—-31.
+
+
+
+
+                                               37
+[46] M. C. Hansen, D. P. Roy, E. Lindquist, B. Adusei, C. O. Justice, A. Altstatt, A method for
+    integrating modis and landsat data for systematic monitoring of forest cover and change in the
+    congo basin, Remote Sensing of Environment 112 (2008) 2495–2513.
+
+[47] M. Schultz, J. Voss, M. Auer, S. Carter, A. Zipf, Open land cover from openstreetmap and
+    remote sensing, International Journal of Applied Earth Observation and Geoinformation 63
+    (2017) 206–213.
+
+[48] Y.-N. Liu, D.-X. Sun, X.-N. Hu, X. Ye, Y.-D. Li, S.-F. Liu, K.-Q. Cao, M.-Y. Chai, J. Zhang,
+    Y. Zhang, et al., The advanced hyperspectral imager: aboard china’s gaofen-5 satellite, IEEE
+    Geoscience and Remote Sensing Magazine 7 (2019) 23–32.
+
+[49] A. S. Yommy, R. Liu, S. Wu, Sar image despeckling using refined lee filter, in: 2015 7th
+    International Conference on Intelligent Human-Machine Systems and Cybernetics, volume 2,
+    IEEE, 2015, pp. 260–265.
+
+[50] J. J. Danielson, D. B. Gesch, Global multi-resolution terrain elevation data 2010
+    (GMTED2010), US Department of the Interior, US Geological Survey Washington, DC, USA,
+    2011.
+
+[51] J. Feranec, T. Soukup, G. Hazeu, G. Jaffrain, European landscape dynamics: CORINE land
+    cover data, CRC Press, 2016.
+
+[52] A. Krizhevsky, I. Sutskever, G. E. Hinton, Imagenet classification with deep convolutional
+    neural networks, Communications of the ACM 60 (2017) 84–90.
+
+[53] K. Simonyan, A. Zisserman, Very deep convolutional networks for large-scale image recognition,
+    in: Proceedings of the International Conference on Learning Representations (ICLR), 2015.
+
+[54] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed, D. Anguelov, D. Erhan, V. Vanhoucke,
+    A. Rabinovich, Going deeper with convolutions, in: Proceedings of the IEEE Conference on
+    Computer Vision and Pattern Recognition (CVPR), 2015, pp. 1–9.
+
+[55] O. Ronneberger, P. Fischer, T. Brox, U-net: Convolutional networks for biomedical image
+    segmentation, in: International Conference on Medical Image Computing and Computer-
+    assisted Intervention (MICCAI), Springer, 2015, pp. 234–241.
+
+
+                                                38
+[56] H. Noh, S. Hong, B. Han, Learning deconvolution network for semantic segmentation, in:
+    Proceedings of the IEEE International Conference on Computer Vision (ICCV), 2015, pp.
+    1520–1528.
+
+[57] A. Newell, K. Yang, J. Deng, Stacked hourglass networks for human pose estimation, in:
+    Proceedings of the European Conference on Computer Vision, Springer, 2016, pp. 483–499.
+
+[58] X. Li, X. Sun, Y. Meng, J. Liang, F. Wu, J. Li, Dice loss for data-imbalanced nlp tasks,
+    in: Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics
+    (ACL), 2020, pp. 465–476.
+
+[59] P. Isola, J.-Y. Zhu, T. Zhou, A. A. Efros, Image-to-image translation with conditional adver-
+    sarial networks, in: Proceedings of the IEEE Conference on Computer Vision and Pattern
+    Recognition (CVPR), 2017, pp. 1125–1134.
+
+[60] F. Yu, M. Zhang, H. Dong, S. Hu, B. Dong, L. Zhang, Dast: Unsupervised domain adaptation
+    in semantic segmentation based on discriminator attention and self-training, in: Proceedings
+    of the AAAI Conference on Artificial Intelligence, volume 35, 2021, pp. 10754–10762.
+
+[61] X. Mao, Q. Li, H. Xie, R. Y. Lau, Z. Wang, S. Paul Smolley, Least squares generative
+    adversarial networks, in: Proceedings of the IEEE International Conference on Computer
+    Vision (ICCV), 2017, pp. 2794–2802.
+
+[62] D. Kingma, J. Ba,        Adam:   A method for stochastic optimization,       arXiv preprint
+    arXiv:1412.6980 (2014).
+
+[63] B. Zhou, A. Khosla, A. Lapedriza, A. Oliva, A. Torralba, Learning deep features for discrimi-
+    native localization, in: Proceedings of the IEEE Conference on Computer Vision and Pattern
+    Recognition, 2016, pp. 2921–2929.
+
+
+
+
+                                               39
+

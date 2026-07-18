@@ -119,8 +119,10 @@ If you use the original **Multimodal Remote Sensing Network (MRSN)** model or it
 }
 ```
 
+## Acknowledgement
+
+Thanks to PaddleSeg for providing the segmentation framework used in this codebase.
+
 ## License
 
 Apache License 2.0.
-
-Thanks to PaddleSeg for providing the segmentation framework used in this codebase.

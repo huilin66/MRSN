@@ -1,0 +1,774 @@
+IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024                                                   8851
+
+
+
+
+          Cross-City Semantic Segmentation (C2Seg) in
+          Multimodal Remote Sensing: Outcome of the
+            2023 IEEE WHISPERS C2Seg Challenge
+           Yuheng Liu , Ye Wang , Graduate Student Member, IEEE, Yifan Zhang , Member, IEEE,
+     Shaohui Mei , Senior Member, IEEE, Jiaqi Zou , Zhuohong Li , Student Member, IEEE, Fangxiao Lu,
+   Wei He , Senior Member, IEEE, Hongyan Zhang, Senior Member, IEEE, Huilin Zhao, Chuan Chen, Cong Xia,
+    Hao Li , Member, IEEE, Gemine Vivone , Senior Member, IEEE, Ronny Hänsch , Senior Member, IEEE,
+      Gulsen Taskin , Senior Member, IEEE, Jing Yao , Member, IEEE, A. K. Qin , Senior Member, IEEE,
+   Bing Zhang , Fellow, IEEE, Jocelyn Chanussot , Fellow, IEEE, and Danfeng Hong , Senior Member, IEEE
+
+
+    Abstract—Given the ever-growing availability of remote sensing              reached its potential, and thus, becomes insufficient to facilitate
+data (e.g., Gaofen in China, Sentinel in the EU, and Landsat in the             the increasing demand of the big EO data era, particularly when
+USA), multimodal remote sensing techniques have been garnering                  dealing with complex urban scenes on a global scale. Artificial
+increasing attention and have made extraordinary progress in
+various Earth observation (EO)-related tasks. The data acquired                 intelligence (AI) techniques [1] provide one promising solution
+by different platforms can provide diverse and complementary                    that is capable of discovering potentially valuable knowledge
+information. The joint exploitation of multimodal remote sensing                from the vast amount of existing EO data more efficiently,
+has been proven effective in improving the existing methods of                  enabling a fast and accurate understanding of the contemporary
+land-use/land-cover segmentation in urban environments. To boost
+                                                                                urban environment.
+technical breakthroughs and accelerate the development of EO
+applications across cities and regions, one important task is to build             Given advances in the development of AI models, e.g., deep
+novel cross-city semantic segmentation models based on modern ar-               learning, there have been successful applications for numerous
+tificial intelligence technologies and emerging multimodal remote               RS and geoscience applications [2], [3], [4], [5], [6], [7], [8], [9],
+sensing data. This leads to the development of better semantic                  [10], which have been proven to be particularly applicable to
+segmentation models with high transferability among different
+                                                                                urban environments where the types, characteristics, and spatial
+cities and regions. The Cross-City Semantic Segmentation contest is
+organized in conjunction with the 13th Workshop on Hyperspec-                   distributions of surface elements are significantly consistent and
+tral Image and Signal Processing: Evolution in Remote Sensing                   similar. However, the capability of adapting to diverse urban
+(WHISPERS).                                                                     environmental differences with highly spatio-temporal and re-
+   Index Terms—Artificial intelligence (AI), cross-city, deep                   gional change remains limited. In this context, one can envision
+learning, hyperspectral, land cover, multimodal benchmark                       a possible solution as being twofold: on the one hand, the joint
+datasets, remote sensing, semantic segmentation.                                exploitation of multimodal RS data has been proven to help
+                                                                                improve the processing ability of cross-city or cross-regional
+                                                                                cases since the RS data acquired from different platforms or
+                           I. INTRODUCTION                                      sensors can provide richer and more diverse complementary
+       EMOTE sensing (RS) presents an essential and promi-                      information. On the other hand, designing more leading-edge
+R      nent approach to acquiring large-scale and high-quality
+Earth observation (EO) data in a short time, which significantly
+                                                                                AI models with a focus on promoting the generalization ability
+                                                                                across cities or regions is an unavoidable trend to mitigate the
+advances the development of EO techniques. Nevertheless, the                    semantic gap between different urban environments, making it
+traditional expert system-centric RS data analysis has almost                   mutually transferable for AI-based RS data analysis.
+                                                                                   Existing methods for semantic segmentation of RS images in
+                                                                                terms of the design of network architecture, module details, and
+   Manuscript received 19 January 2024; revised 31 March 2024; accepted 4       the use of loss functions have achieved promising and superior
+April 2024. Date of current version 29 April 2024. This work was supported in
+part by the National Key Research and Development Program of China under        performance [11], [12], [13], [14]. However, these models are
+Grant 2022YFB3903401, in part by the National Natural Science Foundation        more often than not well-designed for individual study scenes
+of China under Grant 42241109, Grant 42271350, and Grant 62201553. (Cor-        only. A change to another area will lead to poor model perfor-
+responding authors: Hao Li; Danfeng Hong.)
+   Please see the Acknowledgment section of this article for the author         mance, especially for cross-city or cross-region studies. To this
+affiliations.                                                                   end, researchers have started gradually paying more attention to
+   The data and code used for the contest are publicly available at:            the task of semantic segmentation across regions or cities.
+https://github.com/danfenghong/Outcome-of-the-2023-IEEE-WHISPERS-
+C2Seg-Challenge.                                                                   Recently, there has been increasing research interest in the
+   Digital Object Identifier 10.1109/JSTARS.2024.3388464                        joint use of multimodal RS data to better mine the representation
+
+   © 2024 The Authors. This work is licensed under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 License. For more information, see
+                                                     https://creativecommons.org/licenses/by-nc-nd/4.0/
+8852                                          IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024
+
+
+
+
+Fig. 1.   Contest banner of cross-city multimodal semantic segmentation challenge.
+
+
+
+ability of diverse RS modalities for semantic segmentation. By
+incorporating the complementary information extracted from
+multimodal RS data, a more robust and reliable model can
+be built for many RS image analytic tasks (e.g., change de-
+tection, LULC classification, etc.). In this context, multimodal
+RS data fusion is becoming an increasing field to break out
+of the dilemma induced by unimodal data [15]. For instance,
+Hong et al. [16] aimed at the semisupervised transfer learning
+challenge for cross-scene land cover semantic classification in
+RS via a cross-modal deep network called X-ModelNet. More-
+over, Wu et al. [17] proposed a cross-channel reconstruction
+strategy for more accurate multimodal RS data classification.
+In [18], Zhao et al. proposed a multiscale progressive network to
+cascade three subnetworks for gradually segmenting objects into
+small-scale, large-scale, and another-scale for accurate semantic
+segmentation of RS data. These aforementioned methods can be
+unified into a general multimodal deep learning framework for                   Fig. 2. Visualizing C2Seg-AB datasets for semantic segmentation study scene
+RS-base semantic segmentation on both individual and cross-                     across Berlin and Augsburg cities in Germany using multimodal RS data. Figure
+                                                                                from [20].
+region environments, e.g., in [19].
+   To boost technical breakthroughs and accelerate the devel-
+opment of EO applications across cities or regions, it becomes                  together with the C2Seg dataset [20] itself. We hope the lessons
+necessary to create multimodal RS benchmark datasets for cross-                 learned and the resources provided will lead to a huge impact in
+city land cover segmentation and develop novel AI models with                   promoting the general topic of cross-city multimodal semantic
+high generalization ability. The cross-city multimodal semantic                 segmentation in the general RS community.
+segmentation (C2Seg) challenge offers a unique and timely
+opportunity to fill the abovementioned important research gap
+in the RS community. It is worth noting that the C2Seg dataset is                                  II. DATASET AND EVALUATION
+created and available openly and freely in [20], which is used for                 In the context of the C2Seg Challenge, we use a new collection
+the contest organization as the Challenge Track 1 in conjunction                of multimodal RS benchmark datasets [20], including hyper-
+with the 13th Workshop on Hyperspectral Image and Signal Pro-                   spectral, multispectral, and SAR data, for research into cross-city
+cessing: Evolution in Remote Sensing (WHISPERS), Athens,                        semantic segmentation (i.e., C2Seg). The C2Seg datasets consist
+Greece 2023 as shown in Fig. 1 following a successful edition in                of two cross-city scenes as follows.
+last year [21], which is both supported by the IEEE Geoscience                     1) C2Seg-AB (Fig. 2): Berlin-Augsburg cities in Ger-
+and Remote Sensing Society (GRSS) Image Analysis and Data                              many, which are collected from EnMAP, Sentinel-2, and
+Fusion (IADF) Technical Committee.                                                     Sentinel-1 satellite missions on dates as close as possible,
+   The C2Seg Contest received a total of ten highly competitive                        and accordingly preprocessed via ESA’s SNAP toolbox.
+submissions from international groups, out of which the Top3                       2) C2Seg-BW (Fig. 3): Beijing–Wuhan cities in China, which
+teams were announced as the winners of the challenge and                               are collected from Gaofen-5, Gaofen-6, and Gaofen-3
+presented their solutions in the C2Seg special session during                          satellite missions on dates as close as possible, and pre-
+the WHISPERS 2023 conference. In this article, we present                              processed using the ENVI software.
+a holistic overview of the C2Seg Challenge by elaborating on                       To generate the reference data for semantic segmentation, we
+the methodological design of the Top3 solutions and provid-                     retrieved land use and land cover (LULC)-labeled data from
+ing an openly available code base for their implementations                     OpenStreetMap (OSM) LULC platform at https://osmlanduse.
+LIU et al.: C2SEG IN MULTIMODAL REMOTE SENSING: OUTCOME OF THE 2023 IEEE WHISPERS C2SEG CHALLENGE                                              8853
+
+
+
+                                                                              main transformer encoder to extract the spatial and semantic
+                                                                              information of MSIs and two weight-shared convolutional neu-
+                                                                              ral networks (CNN) encoders to encode the features of HSI and
+                                                                              SAR, respectively. Later, a global–local transformer was used to
+                                                                              fuse the multimodal RS data for accurate semantic segmentation.
+                                                                                 The main transformer encoder adopts the masked image
+                                                                              modeling (MIM) pretrained model [1], which is suitable for
+                                                                              feature modeling in semantic segmentation tasks. Given an MSI
+                                                                              Xm ∈ RH×W ×C , the main transformer encoder first projects
+                                                                              the input feature into a latent space RH×W ×D , where D is
+                                                                              the dimension of the latent space. Then, the main transformer
+                                                                              encoder adopts a multihead self-attention module to model the
+Fig. 3. Visualizing C2Seg-BW datasets for semantic segmentation study scene   spatial and semantic information of the MSI. The output of the
+across Beijing and Wuhan cities in China. Figure from [20].                   main transformer encoder is denoted as Xm ∈ RH×W ×D .
+                                                                                 The HSI encoder and SAR encoder are both composed of
+                                                                              a series of convolutional layers. For the sake of simplicity,
+org/ and considered 12 main classes that are well-defined in                  we denote the output of the HSI encoder and SAR encoder
+OSMLULC. We manually checked annotations and completed                        as Xh ∈ RH×W ×D and Xs ∈ RH×W ×D , respectively. These
+the semantic segmentation masks. We also included the major                   features from different modalities are then fused to form the
+street network from OSM and appended it to the existing 12                    multimodal semantic feature Xmm ∈ RH×W ×D , which is de-
+classes, which ensures the granularity and accuracy of the final              fined as follows:
+labeled data [8], [22]. This leads to 13 distinct semantic segmen-
+                                                                                                Xmm = Xm + αXh + βXs                        (1)
+tation categories: 0) Background, 1) Surface water; 2) Street; 3)
+Urban Fabric; 4) Industrial, commercial, and transport; 5) Mine,              where α and β denote the adaptive fusion factors that are learned
+dump, and construction sites; 6) Artificial, vegetated areas; 7)              during the training process, adjusting the contribution of each
+Arable land; 8) Permanent crops; 9) Pastures; 10) Forests; 11)                modality to the final multimodal semantic feature. This multi-
+Shrub; 12) Open spaces with no vegetation; and 13) Inland                     modal semantic feature Xmm is then fed into the global–local
+wetlands.                                                                     transformer.
+   For the final evaluation, all submissions were evaluated with
+the ground truth data by taking the average of both C2Seg                     B. Global–Local Transformer
+datasets (C2Seg-AB and C2Seg-BW). In total, we considered
+                                                                                 The global–local transformer is designed to model the global
+four semantic segmentation metrics, namely, the overall accu-
+                                                                              and local information of the multimodal semantic feature, fol-
+racy (OA), the kappa coefficient (Kappa), the F1 score (F1),
+                                                                              lowing the design of the global–local transformer in [23]. The
+and the mean intersection over union (mIoU). As C2Seg is a
+                                                                              global–local transformer comprises three basic components: 1)
+semantic segmentation task, we decided to rank the final results
+                                                                              Global attention (GA) module, 2) local attention (LA) module,
+based on the mIoU scores.
+                                                                              and 2) interaction module. The multimodal features are mainly
+                                                                              processed by the LA module, which models the representations
+     III. TOP1 SOLUTION: MMGLOTS - MULTIMODAL
+                                                                              in a local context for complexity reduction. The GA module is
+  GLOBAL-LOCAL TRANSFORMER SEGMENTOR FOR REMOTE
+                                                                              used to integrate the global dependencies to enhance the local
+             SENSING IMAGE SEGMENTATION
+                                                                              representations. The interaction module is designed to fuse the
+   This section introduces the multimodal global-local trans-                 global and local information and promote the interaction be-
+former segmentor (MMGLOTS), which is the first-place solu-                    tween individual local features, inspired by the shifted window
+tion of the 2023 C2Seg Challenge. MMGLOTS is composed                         mechanism in [24].
+of three parts: 1) a multimodal semantic feature extractor, 2) a
+global–local transformer, and 3) a prediction restorer (PR). The              C. Prediction Restorer
+overall workflow of the proposed MMGLOTS is shown in Fig. 4.
+                                                                                 It is essential and effective to restore the resolution of encoded
+                                                                              features progressively instead of directly upsampling the low-
+A. Multimodal Semantic Feature Extractor                                      resolution features to the original resolution. MMGLOTS em-
+   The design criteria of the multimodal semantic feature extrac-             beds the upsampling process into the global–local transformer,
+tor (MMSFE) are based on the observation that multimodal data                 using simple bilinear interpolation to restore the resolution of
+have different characteristics. For example, the hyperspectral                the multimodal features. The progressive upsampling process
+image (HSI) has rich spectral information, while synthetic aper-              restores the resolution of the multimodal features by a factor of
+ture radar (SAR) can penetrate clouds and dry surface media to                two at each stage, which is the most common setting for visual
+some extent. Due to the fact that the multispectral image (MSI)               tasks. The restored features are further resized to the original
+has the highest spatial resolution and provides critical spatial              resolution by the PR. For the sake of simplicity, we employ a
+and textural information needed for semantic segmentation, we                 single convolutional layer and a softmax layer to obtain the final
+design an asymmetric feature modeling module, employing a                     prediction result.
+8854                                        IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024
+
+
+
+
+Fig. 4. Overall framework of the Top1 solution - MMGLOTS. It contains three main components: The multimodal semantic feature extractor, the global-local
+transformer, and the PR.
+
+
+
+                              TABLE I                                             IV. TOP2: MULTIMODAL UNSUPERVISED DOMAIN
+        RESULTS ON THE TEST SETS ON THE TWO C2SEG DATASETS
+                                                                               ADAPTATION FOR REMOTE SENSING IMAGE SEGMENTATION.
+                                                                                This section introduces the multimodal unsupervised domain
+                                                                             adaption method of the second-place team in four parts, in-
+                                                                             cluding constructing the multimodal generator network, the
+                                                                             discriminator and adversarial strategy, the loss function, and the
+                                                                             postprocessing strategy.
+
+                                                                             A. Multimodal Generator Network
+                                                                                To enhance the integration of multimodal data [15], we devise
+                                                                             the multimodal generator consisting of four specific branches
+                                                                             that extract domain-specific information from the HSI, MSI,
+                                                                             and SAR, along with a shared branch dedicated to capturing the
+                                                                             shared information present in the concatenated multimodal data,
+                                                                             as depicted in Fig. 5(b). By default, we employ the Seg-HRNet
+D. Experiments and Discussion                                                with HRNet48 [28] for the four branches due to Seg-HRNet’s
+                                                                             superior ability to maintain resolution and capture semantic
+   The MMGLOTS is evaluated on two multimodal remote sens-                   information.
+ing datasets of the C2Seg Challenge, i.e., the Berlin–Augsburg                  The features extracted from the four branches are combined
+(C2Seg-AB) and the Beijing–Wuhan (C2Seg-BW) datasets. For                    using a feature pyramid network (FPN) decoder to yield the
+further comparisons, we choose some single modal methods                     semantic segmentation results. We utilize bilinear upsampling
+as baseline methods, including U-Net [25], SegNet [26], and                  to rescale low-resolution features to align with high-resolution
+Deeplabv3+ [27]. Furthermore, the results from the second-                   features while preserving the same number of channels. These
+place team and the third-place team are also included in the                 four features are concatenated and processed through a 1 × 1
+comparison, as shown in Table I.                                             convolution module to generate the predicted segmentation re-
+   It can be seen that the MMGLOTS achieves the best perfor-                 sults.
+mance in terms of mIoU and mF1 by averaging the results on
+the two datasets, with a slight decrease in OA compared to the
+                                                                             B. Discriminator Network and Adversarial Strategy
+second-place team.
+   Overall, the motivation of the MMGLOTS is straightforward,                   According to [29], when the model is pretrained on the source
+i.e., to fully exploit the characteristics of multimodal data by             domain and predicts an image from the same domain, the seg-
+an asymmetric feature modeling module, which mainly concen-                  mentation output will exhibit a high level of confidence, leading
+trates on the high spatial resolution modality and regards the               to a low entropy in the segmentation result. Conversely, when
+other modalities as auxiliary information.                                   predicting an image from the target domain, the dissimilarity in
+LIU et al.: C2SEG IN MULTIMODAL REMOTE SENSING: OUTCOME OF THE 2023 IEEE WHISPERS C2SEG CHALLENGE                                            8855
+
+
+
+
+Fig. 5.   Overall workflow of the Top2 solution, namely, the multimodal unsupervised domain adaptation network.
+
+
+distribution between the target and source domains will induce                 where ŷt denotes the prediction result of the target domain im-
+low confidence in the segmentation result, resulting in higher                 age. During this process, we keep the discriminator parameters
+entropy of the segmentation result. Based on this theory, we can               fixed and focus on misleading the discriminator by leading it
+use the entropy map of the generator’s prediction as input to the              to believe that the prediction result of the target domain image
+discriminator. By comparing the entropy values, the discrimi-                  belongs to the source domain.
+nator can classify the prediction into either the source or target                For the discriminant loss of the discriminator, we also utilize
+domain. In this article, a five-layer convolutional perceptron is              the binary cross-entropy loss. After calculating the adversarial
+constructed for binary classification of the input entropy map,                loss, we keep the generator parameters fixed and enhance the
+where all convolutional layers use a kernel size of 4, a stride of             discriminator’s discriminative ability using the loss function
+2, and a padding of 1. This enables the model to predict whether
+                                                                                                LDisc = BCE (ŷs , 0) + BCE (ŷt , 1)        (4)
+the original image belongs to the source domain (0) or the target
+domain (1).                                                                    where ŷs represents the prediction result of the source domain
+                                                                               image.
+C. Loss Function
+                                                                               D. Post-Processing
+   The loss function of the multimodal unsupervised domain
+adaptation method consists of three components: 1) supervised                     Inspired by our previous work [32], we further enhance the
+segmentation loss for the multimodal generator using the source                performance by training three advanced models, including the
+domain data, 2) adversarial loss for the multimodal generator                  HRNet 32, ResNeXt 101 [33], and EfficientNet b7 [34]. These
+using the target domain data, and 3) discriminant loss for the                 models are selected based on their state-of-the-art performance
+discriminator using the source domain and target domain data.                  on other benchmark datasets, with each offering distinct network
+   For the supervised segmentation loss, we employ the conven-                 structures that learn variable feature patterns. The predicted
+tional cross-entropy loss function [30], [31] to minimize the dis-             results from these models and HRNet 48 are fused.
+parity between the segmentation results and their corresponding                   Furthermore, we observe that the MSI data effectively cap-
+reference labels, i.e.,                                                        tures land details with its relatively high resolution. On the
+                                                                               other hand, the HSI data provides stable large-scale land-cover
+                                   N    C
+                           1                                                 results due to its ample spectral information. Models trained
+                   LCE = −           ŷic log (pic )                    (2)    on SAR data demonstrate remarkable performance in detecting
+                           N i=1 c=1
+                                                                               water bodies. To fully leverage the strengths of these different
+                                                                               modalities, we also train separate models using MSI, HSI, and
+where N is the number of labeled samples, C is the number of
+                                                                               SAR data and then combine their results to obtain the final
+categories, ŷic represents the one-hot encoded label for the ith
+                                                                               land-cover maps, specifically focusing on the classes of “Street,”
+sample belonging to the cth class, and pic denotes the predicted
+                                                                               “Water,” and “Arable land.”
+probability that the ith sample belongs to the cth class.
+  The binary cross-entropy function is adopted to compute the
+                                                                               E. Results and Discussion
+generator’s adversarial loss, i.e.,
+                                                                                 Fig. 6 presents the segmentation results from different meth-
+                          LAdv = BCE (ŷt , 0)                          (3)    ods on the C2Seg-AB and C2Seg-BW datasets. The top row
+8856                                          IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024
+
+
+
+
+Fig. 6.   False color images and predicted segmentation results on the C2Seg-AB and C2Seg-BW datasets of the Top2 solution.
+
+
+
+
+shows the segmentation results on the C2Seg-AB dataset, while                  A. Architecture
+the bottom row shows the results on the C2Seg-BW dataset. In
+                                                                                  The overall structure of MRSN is shown in Fig. 7, which con-
+Fig. 6(a), a false color image of one test tile (“5_prediction.tif”)           sists of three components: 1) data preprocessing, 2) backbone,
+on the AB dataset is displayed. Fig. 6(b)–(d) shows the pre-                   and 3) decoder module. MRSN is designed with three branches,
+diction results obtained using a single modality (HSI, MSI, or
+                                                                               where each branch corresponds to a single modality.
+SAR data) on the C2Seg-AB dataset. Fig. 6(e) shows the results                    1) Data Processing: To maximize the utilization of the pre-
+obtained using multimodal input, and Fig. 6(f) illustrates the
+                                                                               trained parameters of the backbone models, MRSN extracts two
+results obtained by our proposed method, which integrates three
+                                                                               types of three-band images from MSI. Red (R), green (G), and
+modalities within the UDA framework. Similarly, Fig. 6(g)–(l)                  blue (B) channels form RGB images that reflect the original
+present the corresponding images for a test tile (“4_predic-
+                                                                               visual colors of objects. In addition, near-infrared (Nir), green
+tion.tif”) on the C2Seg-BW dataset.
+                                                                               (G), and blue (B) channels form the GBNir images, which
+   As seen in Table I, the proposed method achieves the OA                     are beneficial for the identification of vegetation, water, and
+of 0.5068, mIoU of 0.1851, and mF1 of 0.2631 during the test
+                                                                               some other objects. To preserve the rich features, SAR images,
+phase, which ranks second among all methods. These results
+                                                                               and HSI images are directly input into the network. Moreover,
+demonstrate the effectiveness and robustness of our method.                    all bands are normalized using statistical mean and standard
+Moreover, as seen from Fig. 6, our proposed method generates
+                                                                               deviation to ensure consistent distributions.
+segmentation maps that exhibit more consistent agreement with                     2) Backbone: In this challenge, a convolutional neural net-
+the RGB image, both for large-scale objects such as “Water,”
+                                                                               work (ConvNet) is taken as the backbone. Considering the
+and small-scale objects such as “Street.” Furthermore, different
+                                                                               diverse information in multimodal data, we design three indi-
+modalities display significant variations in their ability to distin-          vidual backbones that do not share parameters and are trained
+guish land covers [35]. For example, MSI data are more effective
+                                                                               separately.
+for road extraction due to its high resolution [36]. In addition,
+                                                                                  Due to the lower spatial resolution and smaller size of images
+the prediction result using solely HSI data on the C2Seg-BW                    compared to typical computer vision tasks, the fourth stage
+dataset shows poor performance, primarily because it lacks
+                                                                               features of backbones are abandoned. Consequently, only three
+convergence with numerous bands for training. Similarly, the
+                                                                               features of different sizes are reserved for the decoder.
+prediction result using multimodal data also yields unsatisfac-                   Considering limited computing resources, we ultimately
+tory performance. Our method can leverage the strengths and
+                                                                               choose ConvNet-small as the most suitable option for this chal-
+overcome the weaknesses of multimodal data to achieve better
+                                                                               lenge.
+segmentation performance.
+                                                                                  3) Decoder: The decoder module (i.e., Uper Net I&II and
+                                                                               Fusion I&II in Fig. 7) operates on features from the backbones
+       V. TOP3: MULTIMODAL REMOTE SENSING NETWORK                              and the segmentation heads. Considering the rich information
+   Inspired by Siamese networks, a multimodal remote sensing                   contained in HSI, it is designed with a single head and no interac-
+network (MRSN) is proposed. This section presents the MRSN                     tion with other data. The other branches, the RGB branch, GBNir
+consisting of three main parts. We first introduce the overall                 branch, and SAR branch, are decoded with another head. The
+architecture and then provide detailed illustrations of each com-              corresponding features from the backbones are concatenated to
+ponent of the model, respectively.                                             produce the logit of this branch.
+LIU et al.: C2SEG IN MULTIMODAL REMOTE SENSING: OUTCOME OF THE 2023 IEEE WHISPERS C2SEG CHALLENGE                                                        8857
+
+
+
+
+Fig. 7. Overall network architecture of the MRSN proposed for the Top3 solution, which consists of three components: data preprocessing, backbone, and decoder
+module (i.e., Uper Net I&II and Fusion I&II). MRSN is designed with three branches and each branch corresponds to a single modality.
+
+
+   Therefore, two logits are predicted from HSI and other data.                                                 TABLE II
+                                                                                                       VALIDATION RESULTS OF MRSN
+These results are further elementwise added to produce the final
+interpretation result.
+B. Experiment
+   This section begins by introducing the experiment settings.
+Next, it presents the results of the experiments. Finally, it illus-
+trates the comparison experiments.
+   1) Experiment Setting: Since the size of the C2Seg-AB and                                                    TABLE III
+                                                                                                       VALIDATION RESULTS OF MRSN
+C2Seg-BW datasets is different, two different experimental set-
+tings are adopted for each of these datasets.
+   C2Seg-AB: We take pretrained ConvNet parameters on Ima-
+geNet. To create the validation set, we take 10% of the samples,
+resulting in 245 training samples. The batch size is set as 24,
+and training iterations are 8200. The learning rate is initiated
+as 0.0002 by reducing the learning rate by a factor of 0.5 every
+1000 steps.
+   C2Seg-BW: We take pretrained ConvNet parameters on Im-
+ageNet. 6426 samples are selected as the training part and the                  However, a strong change is observed when the model makes
+remaining samples are used for validation. Due to the larger                    predictions on submitted data. This disparity could potentially be
+image size and dataset size of C2Seg-BW, batch size is reduced                  attributed to overfitting, a consequence of an excessive number
+to 6, and training iterations are increased to 40 000 during the                of training iterations.
+training of C2Seg-BW. The decay cycle of the learning rate is                      3) Comparison Experiments: Due to computational limita-
+also increased to 5000.                                                         tions, we first test the model’s performance on the C2Seg-AB
+   We use the AdamW optimizer and a smoothed cross-entropy                      dataset, using a Batch Size of 12 and 2000 iterations. The
+loss combined with a dice loss for these two datasets. It is worth              comparative results of our models are summarized in Table III,
+noting that apart from normalization, no other data enhancement                 where the mIoU metric is recorded for comparison. Notably,
+techniques are used.                                                            the accuracy of MRSN in Table III is slightly lower due to
+   2) Experiment Result: The validation results of C2Seg-AB                     insufficient training, compared to the final results on C2Seg-AB
+and C2Seg-BW are shown in Table II. The term “C2Seg-                            in Table II.
+AB(offline)” refers to the evaluation results from our local                       In our comparative experiments, UperNet was used as the
+training on the C2Seg-AB dataset, while “C2Seg-BW(offline)”                     baseline for training the dataset. Initially, segmentation was
+denotes the results from our local training on the C2Seg-BW                     performed using only RGB images. Later, the NIR band and
+dataset. “C2Seg(online)” represents the final results of our sub-               SAR image were incorporated into the model, resulting in a
+mitted files.                                                                   new branch and the creation of the MRSN-2B model. This
+   The experimental results reveal that our model exhibits high                 addition led to an increase in the mIoU metric from 0.7609
+accuracy across various indicators on the local validation set.                 to 0.7920. With the subsequent inclusion of HSI, the mIoU
+8858                                    IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024
+
+
+
+further increased to 0.8090. Following the training of MRSN, a        WHISPERS and with the support of IEEE GRSS IADF Tech-
+four-branch architecture, the mIoU ultimately peaked at 0.8198.       nical Committee. The methods of the Top3 winning teams in
+These results underscore the superior performance of our model.       the C2Seg challenge are introduced in detail, and the results of
+                                                                      the challenge are presented. Considering the significance of the
+       VI. DISCUSSION OF THE CHALLENGE: THE WINNERS                   multimodal remote sensing data in the context of the big EO
+                                                                      data era, the C2Seg challenge produces a valuable multimodal
+   The Top3 winning teams of the C2Seg challenge have pre-            RS benchmark dataset for cross-city land cover segmentation. It
+sented their solutions in the C2Seg special session during the        offers the unique opportunity to help the RS community develop
+WHISPERS 2023 conference. They employed different strate-             novel models and methods (e.g., RS Foundation models and
+gies to tackle the challenge, however, they all focused on the        self-supervised learning) for comprehensive generalization in
+feature mining of different modalities and the fusion of multi-       wide-area RS data analysis.
+modal features.
+   1) The winning team (see Section III) proposed an MM-
+      GLOTS to extract the multimodal semantic features and                                     ACKNOWLEDGMENT
+      fuse them with the global–local transformer. The MM-
+      GLOTS used the cutting edge MIM pretrained model [37]
+      as the main transformer encoder to extract the spatial and
+                                                                      Authors’ Affiliations
+      semantic information of the MSI, and two weight-shared
+      CNN encoders to encode the features of HSI and SAR,                 Yuheng Liu, Ye Wang, Yifan Zhang, and Shaohui Mei are with the
+                                                                      School of Electronics and Information, Northwestern Polytechnical Univer-
+      respectively. It produced the insights that the multimodal      sity, Xi’an 710129, China (e-mail: hnlyh@mail.nwpu.edu.cn; wy2017263322
+      data have different characteristics, and it is essential and    @mail.nwpu.edu.cn; yifanzhang@nwpu.edu.cn; meish@nwpu.edu.cn).
+      effective to fully utilize the high spatial resolution modal-       Jiaqi Zou, Zhuohong Li, Fangxiao Lu, and Wei He are with the State Key Lab-
+                                                                      oratory of Information Engineering in Surveying, Mapping and Remote Sens-
+      ity and regard the other modalities as auxiliary informa-       ing, Wuhan University, Wuhan 430079, China (e-mail: immortal@whu.edu.cn;
+      tion. Furthermore, the features from different modalities       ashelee@whu.edu.cn; fangxiaolu@whu.edu.cn; weihe1990@whu.edu.cn).
+      should be fused adaptively so that the model can fully              Hongyan Zhang is with the School of Computer Science, China University
+                                                                      of Geosciences, Wuhan 430078, China (e-mail: zhanghongyan@cug.edu.cn).
+      exploit the characteristics of multimodal data. The MM-             Huilin Zhao is with the Department of Land Surveying and Geo-
+      GLOTS achieved the best performance in terms of mIoU            Informatics, The Hong Kong Polytechnic University, Hong Kong (e-mail:
+      and mF1 by averaging the results on the two datasets,           huilin.zhao@connect.polyu.hk).
+                                                                          Chuan Chen is with the Chair of Cartography and Visual Analytics, TUM
+      with a slight decrease in OA compared to the second-place       School of Engineering and Design, Technical University of Munich, 80333
+      team.                                                           München, Germany (e-mail: chuan.chen@tum.de).
+   2) The runner-up team (see Section IV) proposed a multi-               Cong Xia is with the School of Resource and Environment Engineering,
+                                                                      Wuhan 430070, China (e-mail: 265107@whut.edu.cn).
+      modal unsupervised domain adaptation method to lever-               Hao Li is with the Department of Aerospace and Geodesy, Professorship
+      age the strengths and overcome the weaknesses of mul-           of Big Geospatial Data Management, Technical University of Munich, 80333
+      timodal data. It has two main components: 1) the mul-           München, Germany (e-mail: hao_bgd.li@tum.de).
+                                                                          Gemine Vivone is with the Institute of Methodologies for Environmental
+      timodal generator network and 2) the discriminator and          Analysis, National Research Council-IMAA, 85050 Tito, Italy (e-mail: gemine.
+      adversarial strategy. The key idea is to use the entropy map    vivone@imaa.cnr.it).
+      of the generator’s prediction as input to the discriminator,        Ronny Hänsch is with the Department SAR Technology German Aerospace
+                                                                      Center, Microwaves and Radar Institute, 82234 Wessling, Germany (e-mail:
+      and the discriminator can classify the prediction into either   rww.haensch@gmail.com).
+      the source or target domain by comparing the entropy                Gulsen Taskin is with the Institute of Disaster Management, Istanbul Tech-
+      values. The method achieved the best performance in             nical University, 34469 Istanbul, Türkiye (e-mail: gulsen.taskin@itu.edu.tr).
+                                                                          Jing Yao is with the Aerospace Information Research Institute, Chinese
+      terms of OA by averaging the results on the two datasets,       Academy of Sciences, Beijing 100094, China (e-mail: yaojing@aircas.ac.cn).
+      with a slight decrease in mIoU and mF1 compared to the              A. K. Qin is with the Department of Computing Technologies, Swin-
+      first-place team.                                               burne University of Technology, Hawthorn, VIC 3122, Australia (e-mail:
+                                                                      kqin@swin.edu.au).
+   3) The third-place team (see Section V) proposed an MRSN               Bing Zhang is with the Aerospace Information Research Institute, Chinese
+      to fully exploit the characteristics of multimodal data.        Academy of Sciences, Beijing 100094, China, and also with the College of
+      It used three individual backbones that do not share pa-        Resources and Environment, University of Chinese Academy of Sciences,
+                                                                      Beijing 100049, China (e-mail: zb@radi.ac.cn).
+      rameters and are trained separately to extract the features         Jocelyn Chanussot is with the Inria, CNRS, Grenoble INP, LJK, Univ.
+      of different modalities. The main focus of the MRSN is          Grenoble Alpes, 38000 Grenoble, France, and also with the Aerospace Informa-
+      to fully extract the features of different modalities and       tion Research Institute, Chinese Academy of Sciences, Beijing 100094, China
+                                                                      (e-mail: jocelyn.chanussot@inria.fr).
+      reasonably fuse them. Instead of fusing all features of             Danfeng Hong is with the Aerospace Information Research Institute, Chinese
+      different modalities in the early stage, the MRSN first         Academy of Sciences, Beijing 100094, China, and also with the School of
+      fused the features of MSI and SAR and then fused the            Electronic, Electrical and Communication Engineering, University of Chinese
+                                                                      Academy of Sciences, Beijing 100049, China (e-mail: hongdf@aircas.ac.cn).
+      features of HSI after decoding and upsampling.
+
+                                                                                                        REFERENCES
+                       VII. CONCLUSION
+                                                                       [1] D. Hong et al., “SpectralGPT: Spectral remote sensing foundation
+  In this article, the outcome of the C2Seg challenge is                   model,” IEEE Trans. Pattern Anal. Mach. Intell., to be published,
+presented, which is organized in conjunction with the 13th                 doi: 10.1109/TPAMI.2024.3362475.
+LIU et al.: C2SEG IN MULTIMODAL REMOTE SENSING: OUTCOME OF THE 2023 IEEE WHISPERS C2SEG CHALLENGE                                                           8859
+
+
+
+ [2] M. Wieland, Y. Li, and S. Martinis, “Multi-sensor cloud and cloud shadow     [23] Y. Liu, Y. Zhang, Y. Wang, and S. Mei, “Rethinking transformers for
+     segmentation with a convolutional neural network,” Remote Sens. Envi-             semantic segmentation of remote sensing images,” IEEE Trans. Geosci.
+     ron., vol. 230, 2019, Art. no. 111203.                                            Remote Sens., vol. 61, 2023, Art. no. 5617515.
+ [3] X. He, Y. Chen, L. Huang, D. Hong, and Q. Du, “Foundation model-             [24] Z. Liu et al., “Swin transformer: Hierarchical vision transformer using
+     based multimodal remote sensing data classification,” IEEE Trans. Geosci.         shifted windows,” in Proc. IEEE/CVF Int. Conf. Comput. Vis., 2021,
+     Remote Sens., vol. 62, pp. 1–17, 2023.                                            pp. 10012–10022.
+ [4] Y. Yi, Z. Zhang, W. Zhang, C. Zhang, W. Li, and T. Zhao, “Semantic           [25] O. Ronneberger, P. Fischer, and T. Brox, “U-Net: Convolutional networks
+     segmentation of urban buildings from VHR remote sensing imagery using             for biomedical image segmentation,” in Proc. Int. Conf. Med. Image
+     a deep convolutional neural network,” Remote Sens., vol. 11, no. 15, 2019,        Comput. Comput.-Assist. Intervention, 2015, pp. 234–241.
+     Art. no. 1774.                                                               [26] V. Badrinarayanan, A. Kendall, and R. Cipolla, “SegNet: A deep convolu-
+ [5] F. I. Diakogiannis, F. Waldner, P. Caccetta, and C. Wu, “ResUNet-a: A deep        tional encoder-decoder architecture for image segmentation,” IEEE Trans.
+     learning framework for semantic segmentation of remotely sensed data,”            Pattern Anal. Mach. Intell., vol. 39, no. 12, pp. 2481–2495, Dec. 2017.
+     ISPRS J. Photogrammetry Remote Sens., vol. 162, pp. 94–114, 2020.            [27] Liang-Chieh Chen, Y. G. Zhu, F. Papandreou Schroff, and H. Adam,
+ [6] D. Hong, J. Yao, C. Li, D. Meng, N. Yokoya, and J. Chanussot,                     “Encoder-decoder with atrous separable convolution for semantic image
+     “Decoupled-and-coupled networks: Self-supervised hyperspectral image              segmentation,” in Proc. Eur. Conf. Comput. Vis., 2018, pp. 801–818.
+     super-resolution with subpixel fusion,” IEEE Trans. Geosci. Remote Sens.,    [28] J. Wang et al., “Deep high-resolution representation learning for visual
+     vol. 61, pp. 1–12, 2023.                                                          recognition,” IEEE Trans. Pattern Anal. Mach. Intell., vol. 43, no. 10,
+ [7] H. Li, B. Herfort, W. Huang, M. Zia, and A. Zipf, “Exploration of                 pp. 3349–3364, Oct. 2021.
+     openstreetmap missing built-up areas using Twitter hierarchical clustering   [29] T.-H. Vu, H. Jain, M. Bucher, M. Cord, and P. Pérez, “ADVENT: Adversar-
+     and deep learning in Mozambique,” ISPRS J. Photogrammetry Remote                  ial entropy minimization for domain adaptation in semantic segmentation,”
+     Sens., vol. 166, pp. 41–51, 2020.                                                 in Proc. IEEE Conf. Comput. Vis. Pattern Recognit., 2019, pp. 2512–2521.
+ [8] H. Li, J. Zech, D. Hong, P. Ghamisi, M. Schultz, and A. Zipf, “Leverag-      [30] J. Zou, W. He, and H. Zhang, “LESSFormer: Local-enhanced spectral-
+     ing openstreetmap and multimodal remote sensing data with joint deep              spatial transformer for hyperspectral image classification,” IEEE Trans.
+     learning for wastewater treatment plants detection,” Int. J. Appl. Earth          Geosci. Remote Sens., vol. 60, pp. 1–16, 2022.
+     Observation Geoinformation, vol. 110, 2022, Art. no. 102804.                 [31] H. Zhang, J. Zou, and L. Zhang, “EMS-GCN: An end-to-end mix-
+ [9] M. Zhou et al., “A general spatial-frequency learning framework for               hop superpixel-based graph convolutional network for hyperspectral im-
+     multimodal image fusion,” IEEE Trans. Pattern Anal. Mach. Intell., to             age classification,” IEEE Trans. Geosci. Remote Sens., vol. 60, 2022,
+     be published, doi: 10.1109/TPAMI.2024.3368112.                                    Art. no. 5526116.
+[10] H. Li, J. Wang, J. M. Zollner, G. Mai, N. Lao, and M. Werner., “Re-          [32] Z. Li et al., “The outcome of the 2021 IEEE GRSS data fusion contest–track
+     think geographical generalizability with unsupervised self-attention model        MSD: Multitemporal semantic change detection,” IEEE J. Sel. Topics Appl.
+     ensemble: A case study of openstreetmap missing building detection in             Earth Observ. Remote Sens., vol. 15, pp. 1643–1655, 2022.
+     africa,” in Proc. 31st Int. Conf. Adv. Geographic Inf. Syst., pp. 1–9.       [33] S. Xie, R. Girshick, P. Dollár, Z. Tu, and K. He, “Aggregated residual
+[11] X. He, Y. Zhou, J. Zhao, D. Zhang, R. Yao, and Y. Xue, “Swin transformer          transformations for deep neural networks,” in Proc. IEEE Conf. Comput.
+     embedding UNet for remote sensing image semantic segmentation,” IEEE              Vis. Pattern Recognit, 2017, pp. 5987–5995.
+     Trans. Geosci. Remote Sens., vol. 60, pp. 1–15, 2022.                        [34] M. Tan and Q. Le, “Efficientnet: Rethinking model scaling for convolu-
+[12] Y. Li, D. Hong, C. Li, J. Yao, and J. Chanussot, “HD-Net: High-resolution         tional neural networks,” in Proc. Int. Conf. Mach. Learn., 2019, pp. 6105–
+     decoupled network for building footprint extraction via deeply supervised         6114.
+     body and boundary decomposition,” ISPRS J. Photogrammetry Remote             [35] Z. Li, H. Zhang, F. Lu, R. Xue, G. Yang, and L. Zhang, “Breaking the
+     Sens., vol. 209, pp. 51–65, 2024.                                                 resolution barrier: A low-to-high network for large-scale high-resolution
+[13] X. Yang et al., “An attention-fused network for semantic segmentation of          land-cover mapping using low-resolution labels,” ISPRS J. Photogramme-
+     very-high-resolution remote sensing imagery,” ISPRS J. Photogrammetry             try Remote Sens., vol. 192, pp. 244–267, 2022.
+     Remote Sens., vol. 177, pp. 238–262, 2021.                                   [36] Z. Li, W. He, M. Cheng, J. Hu, G. Yang, and H. Zhang, “SinoLC-1: The
+[14] R. Hang, S. Xu, P. Yuan, and Q. Liu, “AANet: An ambiguity-aware network           first 1 m resolution national-scale land-cover map of China created with
+     for remote-sensing image change detection,” IEEE Trans. Geosci. Remote            a deep learning framework and open-access data,” Earth Syst. Sci. Data,
+     Sens., vol. 62, pp. 1–11, 2024.                                                   vol. 15, no. 11, pp. 4749–4780, 2023.
+[15] D. Hong, C. Li, B. Zhang, N. Yokoya, J. A. Benediktsson, and J. Chanussot,   [37] H. Bao, L. Dong, S. Piao, and F. Wei, “BEit: BERT pre-training of image
+     “Multimodal artificial intelligence foundation models: Unleashing the             transformers,” in Proc. Int. Conf. Learn. Representations, 2022, pp. 1–18.
+     power of remote sensing Big Data in earth observation,” Innov. Geosci.,
+     vol. 2, no. 1, 2024, Art. no. 100055.
+[16] D. Hong, N. Yokoya, G.-S. Xia, J. Chanussot, and X. X. Zhu, “X-
+     ModalNet: A semi-supervised deep cross-modal network for classification                                Yuheng Liu received the B.E. degree in electronic
+     of remote sensing data,” ISPRS J. Photogrammetry Remote Sens., vol. 167,                               and information engineering and the M.E. degree
+     pp. 12–23, 2020.                                                                                       in information and communication engineering from
+[17] X. Wu, D. Hong, and J. Chanussot, “Convolutional neural networks                                       Northwestern Polytechnical University, Xi’an, China,
+     for multimodal remote sensing data classification,” IEEE Trans. Geosci.                                in 2021 and 2024, respectively.
+     Remote Sens., vol. 60, pp. 1–10, 2021.                                                                    His research interests include remote sensing, im-
+[18] R. Hang, P. Yang, F. Zhou, and Q. Liu, “Multiscale progressive segmen-                                 age processing, and deep learning.
+     tation network for high-resolution remote sensing imagery,” IEEE Trans.
+     Geosci. Remote Sens., vol. 60, pp. 1–12, 2022.
+[19] D. Hong, J. Yao, D. Meng, Z. Xu, and J. Chanussot, “Multimodal
+     GANs: Toward crossmodal hyperspectral–multispectral image segmen-
+     tation,” IEEE Trans. Geosci. Remote Sens., vol. 59, no. 6, pp. 5103–5113,
+     Jun. 2021.                                                                                             Ye Wang (Graduate Student Member, IEEE) received
+[20] D. Hong et al., “Cross-city matters: A multimodal remote sensing bench-                                the B.S. degree in automation from the Xi’an Uni-
+     mark dataset for cross-city semantic segmentation using high-resolution                                versity of Science and Technology, Xi’an, China, in
+     domain adaptation networks,” Remote Sens. Environ., vol. 299, 2023,                                    2017, and the M.S. degree in biomedical engineering,
+     Art. no. 113856.                                                                                       in 2020, from Northwestern Polytechnical University,
+[21] G. Vivone, A. Garzelli, Y. Xu, W. Liao, and J. Chanussot, “Panchromatic                                Xi’an, China, where she is currently working toward
+     and hyperspectral image fusion: Outcome of the 2022 whispers hyperspec-                                the Ph.D. degree in information and communication
+     tral pansharpening challenge,” IEEE J. Sel. Topics Appl. Earth Observ.                                 engineering with the School of Electronics and Infor-
+     Remote Sens., vol. 16, pp. 166–179, 2022.                                                              mation.
+[22] M. Schultz, J. Voss, M. Auer, S. Carter, and A. Zipf, “Open land cover                                    Her research interests include remote sensing,
+     from openstreetmap and remote sensing,” Int. J. Appl. Earth Observation                                hyperspectral object tracking, image processing,
+     Geoinformation, vol. 63, pp. 206–213, 2017.                                                            and deep learning.
+8860                                             IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024
+
+
+
+                          Yifan Zhang (Member, IEEE) received the B.S. de-                                     Fangxiao Lu received the B.S. degree, in 2020, from
+                          gree in electronics and information technology and                                   the School of Geomatics and Geodesy, Wuhan Uni-
+                          the M.S. and Ph.D. degrees in signal and information                                 versity, Wuhan, China, where he is currently working
+                          processing from Northwestern Polytechnical Univer-                                   toward the Ph.D. degree in photogrammetry and re-
+                          sity, Xi’an, China, in 2001, 2004, and 2007, respec-                                 mote sensing with State Key Laboratory of Informa-
+                          tively.                                                                              tion Engineering in Surveying, Mapping, and Remote
+                             From 2007 to 2010, she worked as a Postdoctoral                                   Sensing.
+                          Researcher with the Vision Laboratory, Department                                       His research interests intelligent remote sensing
+                          of Physics, University of Antwerp, Antwerp, Bel-                                     interpretation.
+                          gium. She is currently a Professor with the School of                                   Mr. Lu was the recipient of the first-place prize in
+                          Electronics and Information, Northwestern Polytech-                                  the Multitemporal Semantic Change Detection Track
+nical University. Her research interests include hyperspectral image analysis,       of the 2021 IEEE Geoscience and Remote Sensing Society (GRSS) Data Fusion
+image fusion, and image restoration.                                                 Contest, the second place in the Semisupervised Learning for Land Cover
+                                                                                     Classification Challenge of the 2022 IEEE GRSS Data Fusion Contest, and the
+                                                                                     second place in the Cross-City Multimodal Semantic Segmentation Challenge
+                             Shaohui Mei (Senior Member, IEEE) received the          of the 2023 IEEE Workshop on Hyperspectral Image and Signal Processing:
+                             B.S. degree in electronics and information engineer-    Evolution in Remote Sensing.
+                             ing and the Ph.D. degree in signal and information
+                             processing from Northwestern Polytechnical Univer-
+                             sity, Xi’an, China, in 2005 and 2011, respectively.
+                                He was a Visiting Student with the University of                               Wei He (Senior Member, IEEE) received the B.S.
+                             Sydney, Camperdown, NSW, Australia, from 2007                                     degree from the School of Mathematics and Statis-
+                             to 2008. He is currently a Professor with the School                              tics and the Ph.D degree in surveying, mapping, and
+                             of Electronics and Information, Northwestern Poly-                                remote sensing from the State Key Laboratory of
+                             technical University. His research interests include                              Information Engineering in Surveying, Mapping, and
+                             hyperspectral remotesensing image processing and                                  Remote Sensing (LIESMARS), Wuhan University,
+applications, intelligent signal and information acquisition and processing, video                             Wuhan, China, in 2012 and 2017, respectively.
+processing, and pattern recognition.                                                                              From 2018 to 2020, he was a Researcher with the
+   Dr. Mei was the recipient of the First prize of Natural Science Award of                                    Geoinformatics Unit, RIKEN Center for Advanced
+Shaanxi Province in 2022, the Excellent Doctoral Dissertation Award of Shaanxi                                 Intelligence Project, Tokyo, Japan, where he was a
+Province in 2014, the Best Paper Award of the IEEE International Symposium on                                  Research Scientist, from 2020 to 2021. He is currently
+Intelligent Signal Processing and Communication Systems (ISPACS) in 2017,            a Full Professor with LIESMARS, Wuhan University. His research interests
+the Best Reviewer for the IEEE JOURNAL OF SELECTED TOPICS IN APPLIED                 include image quality improvement, remote sensing image processing, and low
+EARTH OBSERVATIONS AND REMOTE SENSING (JSTARS) in 2019, and the IEEE                 rank representation and deep learning.
+TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING (TGRS) in 2022. He
+serves as the Associate Editor for IEEE TGRS and IEEE JSTARS, the Guest
+Editor for Remote Sensing, and the Reviewer for more than 30 international
+famous academic journals.
+                                                                                                                Hongyan Zhang (Senior Member, IEEE) received
+                                                                                                                the B.S. degree in geographic information systems
+                          Jiaqi Zou received the B.S. degree in surveying and                                   and the Ph.D. degree in photogrammetry and remote
+                          mapping engineering from the China University of                                      sensing from Wuhan University, Wuhan, China, in
+                          Mining and Technology, Beijing, China, in 2020.                                       2005 and 2010, respectively.
+                          She is currently working toward the Ph.D. degree in                                      From 2010 to 2022, he was a Researcher with the
+                          photogrammetry and remote sensing with State Key                                      State Key Laboratory of Information Engineering in
+                          Laboratory of Information Engineering in Surveying,                                   Surveying, Mapping, and Remote Sensing, Wuhan
+                          Mapping, and Remote Sensing, Wuhan University,                                        University. He is currently the Dean of the School of
+                          Wuhan, China.                                                                         Computer Science, China University of Geosciences,
+                             Her research interests include hyperspectral image                                 Wuhan. He is also a Young Chang-Jiang Scholar
+                          classification, image processing, and deep learning.       appointed by the Ministry of Education of China. He has authored/coauthored
+                             Ms. Zou was the recipient of the second place           more than 110 research papers. His research interests include high-dimensional
+in the Cross-City Multimodal Semantic Segmentation Challenge of the 2023             data intelligent processing and agricultural remote sensing.
+IEEE WHISPERS, and the second place in the Semisupervised Learning for                  Dr. Zhang was recipient of the first place in the Data Fusion Contest of 2021
+Land Cover Classification Challenge of the 2022 IEEE Geoscience and Remote           and 2019 organized by the IEEE Image Analysis and Data Fusion Technical
+Sensing Society Data Fusion Contest.                                                 Committee. He serves as an Associate Editor for IEEE JOURNAL OF SELECTED
+                                                                                     TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, Photogram-
+                                                                                     metric Engineering and Remote Sensing and Computers and Geosciences. He
+                                                                                     is a Reviewer for more than 40 international academic journals, including
+                          Zhuohong Li (Student Member, IEEE) received the            Remote Sensing of Environment, ISPRS Journal of Photogrammetry and Remote
+                          B.S. degree in communication engineering, in 2020,         Sensing, IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING, and
+                          from Wuhan University, Wuhan, China, where he is           IEEE TRANSACTIONS ON IMAGE PROCESSING.
+                          currently working toward the Ph.D. degree in pho-
+                          togrammetry and remote sensing with the State Key
+                          Laboratory of Information Engineering in Surveying,
+                          Mapping, and Remote Sensing.
+                             His research interests include land-cover mapping                                 Huilin Zhao received the B.S. and M.S. degrees
+                          and large-scale Earth observation application.                                       from the School of Resource and Environmental En-
+                             Mr. Li was the recipient of the first-place prize in                              gineering, Wuhan University of Technology, Wuhan,
+                          the Multitemporal Semantic Change Detection Track                                    China, in 2020 and 2023, respectively. He is currently
+of the 2021 IEEE Geoscience and Remote Sensing Society (GRSS) Data Fusion                                      working toward the Ph.D. degree with the Department
+Contest, the second place in the Semisupervised Learning for Land Cover                                        of Land Surveying and Geo-informatics, Hong Kong
+Classification Challenge of the 2022 IEEE GRSS Data Fusion Contest, the                                        Polytechnic University, Hongkong.
+second place in the Cross-City Multimodal Semantic Segmentation Challenge                                         His research interests include the application of
+of the 2023 IEEE WHISPERS, and the highlight paper award in the IEEE/CVF                                       deep learning in remote sensing image interpretation,
+Conference on Computer Vision and Pattern Recognition 2024.                                                    knowledge graph, and semantic segmentation.
+LIU et al.: C2SEG IN MULTIMODAL REMOTE SENSING: OUTCOME OF THE 2023 IEEE WHISPERS C2SEG CHALLENGE                                                                8861
+
+
+
+                           Chuan Chen received the B.S. degree from Wuhan                                      Ronny Hänsch (Senior Member, IEEE) received the
+                           University, Wuhan, China, in 2019, and the M.S.                                     diploma in computer science and the Ph.D. degree
+                           degree, in 2022, from the Technical University of                                   from the TU Berlin, Berlin, Germany, in 2007 and
+                           Munich, Munich, Germany, where he is currently                                      2014, respectively.
+                           working toward the Ph.D. degree with the Chair of                                      He is a currently a Scientist with the Microwave and
+                           Chair of Cartography and Visual Analytics.                                          Radar Institute, German Aerospace Center, Cologne,
+                              His research interests include semantic segmenta-                                Germany, where he leads the Machine Learning Team
+                           tion of remote sensing image, knowledge graph, and                                  in the Signal Processing Group, SAR Technology De-
+                           responsible GIS.                                                                    partment. He continues to lecture with the Computer
+                                                                                                               Vision and Remote Sensing Group, TU Berlin. He has
+                                                                                                               extensive experience in organizing remote sensing
+                                                                                     community competitions, and serves as the Geoscience and Remote Sensing
+                           Cong Xia received the B.S. and M.S. degrees from the      Society (GRSS) representative within SpaceNet, and was the technical lead of
+                           School of Resource and Environmental Engineering,         the SpaceNet 8 Challenge. His research interests include computer vision and
+                           Wuhan University of Technology, Wuhan, China, in          machine learning with a focus on remote sensing (in particular SAR processing
+                           2020 and 2023, respectively.                              and analysis).
+                             His research interests include remote sensing im-          Dr. Hänsch served as an Editor for the Geoscience and Remote Sensing
+                           age semantic segmentation.                                Society (GRSS) eNewsletter from 2021 to 2024, as the Editor in Chief of the
+                                                                                     Geoscience and Remote Sensing Letters since 2024 and as Associate Editor of the
+                                                                                     ISPRS Journal of Photogrammetry and Remote Sensing since 2022. He served
+                                                                                     as a (co-)chair of the IEEE GRSS Image Analysis and Data Fusion technical
+                                                                                     committee from 2017 to 2023 and has been serving as the co-chair of the ISPRS
+                                                                                     working group on Image Orientation and Sensor Fusion since 2016. He served
+                          Hao Li (Member, IEEE) received the double B.Sc.            as an organizer of the CVPR Workshop EarthVision from 2017 to 2024 and the
+                          degrees in cartography and computer science from           IGARSS Tutorial on Machine Learning in Remote Sensing from 2017 to 2024.
+                          Wuhan University, Wuhan, China in 2015, the M.Sc.
+                          degree in geomatic engineering from the University
+                          of Stuttgart, Stuttgart, Germany, in 2018, and the Dr.
+                          rer. nat degree in Geoinformatics from the GIScience
+                          research group, Heidelberg University, Germany in
+                          2022. He is currently working toward the Habilitation
+                          degree in Geoinformatics with the Technical Univer-
+                          sity of Munich, Munich, Germany.
+                             Since 2022, he has been a Postdoc Researcher with
+the Professorship of Big Geospatial Data Management, Technical University                                       Gulsen Taskin (Senior Member, IEEE) received the
+of Munich. His research interests include volunteered geographic information,                                   B.S., M.S., and Ph.D. degrees in computational sci-
+geo-semantics, remote sensing, and geospatial Big Data management.                                              ence and engineering from Istanbul Technical Uni-
+   Dr. Li was the recipient of the ISPRS Best Poster Award (TC IV) in the                                       versity, Istanbul, Turkey, in 2001, 2003, and 2011,
+XXIV ISPRS Congress in Nice in 2022, and the ACM SIGSPATIAL GIS Cup                                             respectively.
+Runners-Up Award in 2023.                                                                                          She was a Visiting Scholar with the School of Elec-
+                                                                                                                trical and Computer Engineering and School of Civil
+                            Gemine Vivone (Senior Member, IEEE) received the                                    Engineering, Purdue University, West Lafayette, IN,
+                            B.Sc. (summa cum laude), the M.Sc. (summa cum                                       USA, from 2008 to 2009 and 2016 to 2017. She is
+                            laude), and the Ph.D. (highest rank) degrees in infor-                              currently an Associate Professor with the Institute of
+                            mation engineering from the University of Salerno,                                  Disaster Management, Istanbul Technical University.
+                            Salerno, Italy, in 2008, 2011, and 2014, respectively.   Her research interests include hyperspectral image analysis, machine learning,
+                               In 2014, he joined the North Atlantic Treaty Or-      explainable AI, and sensitivity analysis.
+                            ganization Science & Technology Organization Cen-          Dr. Taskin has served as an Associate Editor for IEEE GEOSCIENCE AND
+                            tre for Maritime Research and Experimentation, La        REMOTE SENSING LETTERS journal and has reviewed several other journals.
+                            Spezia, Italy, as a Scientist. In 2019, he was an
+                            Assistant Professor with the University of Salerno,
+                            Fisciano, Italy. In 2019, he was a Visiting Professor
+with the Grenoble Institute of Technology (INPG), Grenoble, France. He is
+currently a senior Researcher with the National Research Council, Rome, Italy.
+His research interests include image fusion, statistical signal processing, deep
+learning, and classification and tracking of remotely sensed images.
+   Dr. Vivone was the recipient of the IEEE Geoscience and Remote Sensing
+Society (GRSS) Early Career Award in 2021, the Symposium Best Paper Award
+at IEEE International Geoscience and Remote Sensing Symposium (IGARSS)                                          Jing Yao (Member, IEEE) received the Ph.D. de-
+in 2015, and the Best Reviewer Award of the IEEE Transactions on Geoscience                                     gree in mathematics from Xi’an Jiaotong University,
+and Remote Sensing in 2017. Moreover, he is listed in the World’s Top 2. He is an                               Xi’an, China, in 2021.
+ex-officio member of the IEEE GRSS Administrative Committee, a Co-Chair of                                        From 2019 to 2020, he was a Visiting Student
+the IEEE GRSS Image Analysis and Data Fusion Technical Committee, a mem-                                        with the Signal Processing in Earth Observation,
+ber of the IEEE Task Force on “Deep Vision in Space,” and he was the Leader                                     Technical University of Munich, Munich, Germany,
+of the Image and Signal Processing Working Group of the IEEE Image Analysis                                     and with the Remote Sensing Technology Institute,
+and Data Fusion Technical Committee from 2020 to 2021. He is currently the                                      German Aerospace Center, Oberpfaffenhofen, Ger-
+Editor in Chief for IEEE GEOSCIENCE AND REMOTE SENSING ENEWSLETTER,                                             many. Since 2021, he has been an Assistant Professor
+an Area Editor for Elsevier Information Fusion, and Associate Editor for IEEE                                   with the Aerospace Information Research Institute,
+TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING, IEEE JOURNAL OF                                                  Chinese Academy of Sciences, Beijing, China. His
+SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING,                    research interests include hyperspectral and multimodal remote sensing image
+and IEEE GEOSCIENCE AND REMOTE SENSING LETTERS. Moreover, he is an                   analysis, mainly including optimization and deep learning-based methods for
+Advisory Board Member for ISPRS Journal of Photogrammetry and Remote                 image processing and interpretation tasks.
+Sensing, and an Editorial Board Member for Nature Scientific Reports and MDPI           Dr. Yao was the recipient of the Jose Bioucas Dias Award for recognizing an
+Remote Sensing. He served as a Guest Associate Editor for several Special Issues.    outstanding paper at WHISPERS in 2021.
+8862                                            IEEE JOURNAL OF SELECTED TOPICS IN APPLIED EARTH OBSERVATIONS AND REMOTE SENSING, VOL. 17, 2024
+
+
+
+                           A. K. Qin (Senior Member, IEEE) received the                                       Jocelyn Chanussot (Fellow, IEEE) received the
+                           B.Eng. degree in automatic control from Southeast                                  M.Sc. degree in electrical engineering from the
+                           University, Nanjing, China, in 2001, and the Ph.D.                                 Grenoble Institute of Technology (Grenoble INP),
+                           degree in computer science and engineering from                                    Grenoble, France, in 1995, and the Ph.D. degree from
+                           Nanyang Technology University, Singapore, in 2007.                                 the Université de Savoie, Annecy, France, in 1998.
+                              From 2007 to 2017, he was with the University                                      From 1999 to 2023, he was with Grenoble INP,
+                           of Waterloo, Waterloo, ON, Canada; INRIA Greno-                                    where he was a Professor of Signal and Image Pro-
+                           ble Rhône-Alpes, Montbonnot-Saint-Martin, France;                                  cessing. He is currently a Research Director with
+                           and RMIT University, Melbourne, VIC, Australia. In                                 INRIA, Grenoble, France. He has been a Visit-
+                           2017, he joined the Swinburne University of Technol-                               ing Scholar with Stanford University, Stanford, CA,
+                           ogy, Hawthorn, VIC, Australia, where he is currently                               USA; KTH (Sweden), Stockholm, Sweden; and Na-
+a Professor. He is also currently the Director of Swinburne Intelligent Data       tional University of Singapore, Singapore. Since 2013, he is an Adjunct Professor
+Analytics Lab and the Deputy Director of Swinburne Space Technology and            of the University of Iceland, Reykjavik, Iceland. From 2015 to 2017, he was a
+Industry Institute, Hawthorn, VIC, Australia. His research interests include       Visiting Professor with the University of California, Los Angeles, CA, USA.
+machine learning, evolutionary computation, computer vision, remote sensing,       He holds the AXA chair in remote sensing and is an Adjunct Professor with
+services computing, and edge computing.                                            the Chinese Academy of Sciences, Aerospace Information research Institute,
+   Dr. Qin was the recipient of the 2012 IEEE Transactions on Evolutionary         Beijing, China. His research interests include image analysis, hyperspectral
+Computation Outstanding Paper Award and the 2022 IEEE Transactions on              remote sensing, data fusion, machine learning and artificial intelligence.
+Neural Networks and Learning Systems Outstanding Associate Editor Award.              Dr. Chanussot is a Fellow of ELLIS, a Fellow of AAIA, a Member of the
+He is currently the Chair of the IEEE Computational Intelligence Society (CIS)     Institut Universitaire de France from 2012 to 2017. He is an Associate Editor
+Neural Networks Task Force on “Deep Vision in Space,” the Vice-Chair of            for the IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING, IEEE
+the IEEE CIS Emergent Technologies Task Force on “Multitask Learning and           TRANSACTIONS ON IMAGE PROCESSING, and PROCEEDINGS OF THE IEEE. He
+Multitask Optimization,” the Vice-Chair of the IEEE CIS Neural Networks Task       was the Editor in Chief of the IEEE JOURNAL OF SELECTED TOPICS IN APPLIED
+Force on “Deep Edge Intelligence.” He served as the General Co-Chair of the        EARTH OBSERVATIONS AND REMOTE SENSING from 2011 to 2015. In 2014, he
+2022 IEEE International Joint Conference on Neural Networks and as the Chair       served as a Guest Editor for the IEEE Signal Processing Magazine. He is the
+of the IEEE CIS Neural Networks Technical Committee during the 2021 to 2022        founding President of IEEE Geoscience and Remote Sensing French chapter
+term.                                                                              from 2007–2010 which received the 2010 IEEE Geoscience and Remote Sensing
+                                                                                   Society Chapter Excellence Award. He was the Vice-President of the IEEE Geo-
+                                                                                   science and Remote Sensing Society, in charge of meetings and symposia from
+                                                                                   2017 to 2019. He is a Highly Cited Researcher (Clarivate Analytics/Thomson
+                                                                                   Reuters, since 2018).
+
+                                                                                                               Danfeng Hong (Senior Member, IEEE) received the
+                                                                                                               Dr.-Ing degree (summa cum laude) from the Signal
+                                                                                                               Processing in Earth Observation, Technical Univer-
+                                                                                                               sity of Munich, Munich, Germany, in 2019.
+                                                                                                                  He was a Research Scientist and led a Spectral Vi-
+                             Bing Zhang (Fellow, IEEE) received the B.S. de-                                   sion Working Group with the Remote Sensing Tech-
+                             gree in geography from Peking University, Beijing,                                nology Institute, German Aerospace Center, Oberp-
+                             China, in 1991, and the M.S. and Ph.D. degrees in                                 faffenhofen, Germany. He was also an Adjunct Scien-
+                             remote sensing from the Institute of Remote Sensing                               tist with GIPSA-lab, Grenoble INP, CNRS, Univer-
+                             Applications, Chinese Academy of Sciences, Beijing,                               sity Grenoble Alpes, Grenoble, France. Since 2022,
+                             China, in 1994 and 2003, respectively.                                            he has been a Full Professor with the Aerospace
+                                He is currently a Full Professor and the Deputy    Information Research Institute, Chinese Academy of Sciences, Beijing, China.
+                             Director of the Aerospace Information Research In-    His research interests include artificial intelligence, multimodal remote sensing,
+                             stitute, China Academy of Sciences. He has authored   foundation models, hyperspectral imaging, and large-scale Earth observation.
+                             or coauthored more than 400 journal papers. His         Dr. Hong was the recipient of the Best Reviewer Award of the IEEE TRANS-
+                             research focuses on hyperspectral remote sensing      ACTIONS ON GEOSCIENCE AND REMOTE SENSING (TGRS) in 2021 and 2022, the
+technology and applications.                                                       Best Reviewer Award of the IEEE JOURNAL OF SELECTED TOPICS IN APPLIED
+   Dr. Zhang is a Fellow of the Geographical Society of China. He is also a        EARTH OBSERVATIONS AND REMOTE SENSING in 2022, the Jose Bioucas Dias
+Highly Cited Researcher (Clarivate Analytics). He was the recipient more than      Award for recognizing the outstanding paper at WHISPERS in 2021, the Remote
+ten important prizes from international institutions and the Chinese government,   Sensing Young Investigator Award in 2022, the IEEE Geoscience and Remote
+including the IEEE Geoscience and Remote Sensing Society Regional Leader           Sensing Society Early Career Award in 2022, and a Highly Cited Researcher
+Award, the National Science and Technology Advance Award of China, the             (Clarivate Analytics) in 2022 and 2023. He is an Associate Editor for IEEE
+Outstanding Scientific Achievement Award of Chinese Academy of Sciences,           TGRS and the Editorial Board Member of Information Fusion and ISPRS
+etc., for his creative achievements.                                               JOURNAL OF PHOTOGRAMMETRY AND REMOTE SENSING.
+
