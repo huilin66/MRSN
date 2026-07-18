@@ -1,7 +1,7 @@
 train_dataset:
   type: RS_MD3B
-  dataset_root: ${C2SEG_AB_ROOT}\train
-  train_path:  ${C2SEG_AB_ROOT}\train.txt
+  dataset_root: ${C2SEG_AB_ROOT}/train
+  train_path:  ${C2SEG_AB_ROOT}/train.txt
   num_classes: 14
   transforms:
     - type: Normalize2
@@ -13,8 +13,8 @@ train_dataset:
 
 val_dataset:
   type: RS_MD3B
-  dataset_root: ${C2SEG_AB_ROOT}\train
-  val_path:  ${C2SEG_AB_ROOT}\val.txt
+  dataset_root: ${C2SEG_AB_ROOT}/train
+  val_path:  ${C2SEG_AB_ROOT}/val.txt
   num_classes: 14
   transforms:
     - type: Normalize2
