@@ -27,7 +27,7 @@ val_dataset:
 
 
 batch_size: 16
-iters: 40000
+iters: 800
 save_interval: 800
 log_iters: 50
 num_workers: 4
