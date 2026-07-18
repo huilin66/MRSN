@@ -1,0 +1,7 @@
+_base_: 'C2Seg_AB.yml'
+
+model:
+  type: UNet
+  in_channels: 248
+  num_classes: 14
+
