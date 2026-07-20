@@ -385,7 +385,15 @@ def existing(path: Path) -> Path | None:
 
 
 def scene_candidates(data_root: Path, dataset: str, scene: str) -> tuple[list[Path], list[Path]]:
-    roots = [data_root, data_root / "tif", data_root / f"C2Seg_{dataset}", data_root / f"C2Seg_{dataset}" / "tif"]
+    roots = [
+        data_root,
+        data_root / "tif",
+        data_root / f"tif_{dataset}",
+        data_root / f"mat_{dataset}",
+        data_root / f"C2Seg_{dataset}",
+        data_root / f"C2Seg_{dataset}" / "tif",
+        data_root / f"C2Seg_{dataset}" / f"tif_{dataset}",
+    ]
     roots.extend([data_root / "full", data_root / f"C2Seg_{dataset}" / "full"])
     mat_names = [f"{scene}.mat", f"{scene}_multimodal.mat", f"{scene.lower()}.mat", f"{scene.lower()}_multimodal.mat"]
     tiff_roots = []
@@ -701,6 +709,13 @@ def run_one_model(spec: ModelSpec, source: FullSceneSource, args: argparse.Names
     msi_bands = source.msi.resolve_bands(args.msi_bands)
     sar_bands = source.sar.resolve_bands(args.sar_bands)
     hsi_requested = args.hsi_bands or parse_bands_file(args.hsi_bands_file)
+    if hsi_requested is None and source.hsi.count > len(mean2):
+        hsi_requested = list(range(1, len(mean2) + 1))
+        print(
+            f"[{spec.name}] HSI has {source.hsi.count} bands, config expects {len(mean2)}; "
+            f"using bands 1..{len(mean2)}. Pass --hsi_bands to override.",
+            flush=True,
+        )
     hsi_bands = source.hsi.resolve_bands(hsi_requested)
     if len(msi_bands) + len(sar_bands) != len(mean1):
         raise ValueError(f"{spec.name}: MSI+SAR channels {len(msi_bands)+len(sar_bands)} != mean1 length {len(mean1)}")
