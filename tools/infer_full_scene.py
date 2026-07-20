@@ -137,6 +137,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sar_bands", nargs="+", type=int, default=None, help="1-based SAR bands.")
     parser.add_argument("--hsi_bands", nargs="+", type=int, default=None, help="1-based HSI bands.")
     parser.add_argument("--hsi_bands_file", default="", help="Text file with 1-based HSI bands.")
+    parser.add_argument(
+        "--hsi_scale",
+        type=float,
+        default=None,
+        help="Scale applied to full-scene HSI before Normalize2. Default auto-detects reflectance-scale HSI and uses 10000.",
+    )
     parser.add_argument("--rgb_bands", nargs=3, type=int, default=[1, 2, 3], metavar=("R", "G", "B"))
     parser.add_argument("--vis_downsample", type=int, default=0)
     parser.add_argument("--max_vis_pixels", type=int, default=25_000_000)
@@ -512,6 +518,17 @@ def normalize_inputs(im1: np.ndarray, im2: np.ndarray, mean1, std1, mean2, std2)
     return im1.astype("float32", copy=False), im2.astype("float32", copy=False)
 
 
+def maybe_rescale_hsi(im2: np.ndarray, mean2: np.ndarray, hsi_scale: float | None) -> np.ndarray:
+    if hsi_scale is None:
+        if float(np.nanmedian(np.abs(mean2))) > 100 and float(np.nanmedian(np.abs(im2))) < 10:
+            hsi_scale = 10000.0
+        else:
+            hsi_scale = 1.0
+    if hsi_scale != 1.0:
+        im2 = im2 * hsi_scale
+    return im2
+
+
 def forward_logits(model, im1, im2, paddle):
     if hasattr(model, "data_format") and model.data_format == "NHWC":
         im1 = im1.transpose((0, 2, 3, 1))
@@ -726,6 +743,7 @@ def run_one_model(spec: ModelSpec, source: FullSceneSource, args: argparse.Names
         paddle, _Config, _get_sys_env, _seg_utils = runtime
         x, y, w, h = next(iter_windows(source.width, source.height, args.crop_size, args.stride))
         im1, im2 = source.read_patch(x, y, w, h, msi_bands, sar_bands, hsi_bands)
+        im2 = maybe_rescale_hsi(im2, mean2, args.hsi_scale)
         im1, im2 = normalize_inputs(im1, im2, mean1, std1, mean2, std2)
         with paddle.no_grad():
             logits = forward_logits(
@@ -766,6 +784,7 @@ def run_one_model(spec: ModelSpec, source: FullSceneSource, args: argparse.Names
     with paddle.no_grad():
         for x, y, w, h in windows:
             im1, im2 = source.read_patch(x, y, w, h, msi_bands, sar_bands, hsi_bands)
+            im2 = maybe_rescale_hsi(im2, mean2, args.hsi_scale)
             im1, im2 = normalize_inputs(im1, im2, mean1, std1, mean2, std2)
             batch1.append(im1)
             batch2.append(im2)

@@ -41,7 +41,7 @@ DEFAULT_MODEL_COLUMNS = [
     ("HighDAN", "highdan_BW"),
     ("UPerNet", "cxup_1b_BW"),
     ("MRSN", "cxup_4b2h_BW"),
-    ("MBFM", "cxup_4b_BW_PMRG_v2_lossV2"),
+    ("MRSFN", "cxup_4b_BW_PMRG_v2_lossV2"),
 ]
 
 BRIGHT_COLORS = [

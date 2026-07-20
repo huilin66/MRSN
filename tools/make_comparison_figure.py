@@ -39,7 +39,7 @@ DEFAULT_COLUMNS = [
     ("HighDAN", "pred_color/highdan_BW.png", "mask"),
     ("UPerNet", "pred_color/cxup_1b_BW.png", "mask"),
     ("MRSN", "pred_color/cxup_4b2h_BW.png", "mask"),
-    ("MBFM", "pred_color/cxup_4b_BW_PMRG_v2_lossV2.png", "mask"),
+    ("MRSFN", "pred_color/cxup_4b_BW_PMRG_v2_lossV2.png", "mask"),
 ]
 
 BRIGHT_COLORS = [

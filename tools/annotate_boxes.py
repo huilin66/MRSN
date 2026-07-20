@@ -4,7 +4,7 @@
 
 Default behavior:
   - reads <collect_dir>/select.txt if present
-  - opens each selected sample's MBFM prediction image
+  - opens each selected sample's MRSFN prediction image
   - drag a rectangle, press s to save and move next
   - press n to skip, c to clear, q to quit
 
@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument(
         "--image",
         default=DEFAULT_ANNOTATION_IMAGE,
-        help="Relative image path inside each sample folder. Default: MBFM pred_color.",
+        help="Relative image path inside each sample folder. Default: MRSFN pred_color.",
     )
     parser.add_argument(
         "--output",
