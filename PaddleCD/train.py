@@ -23,7 +23,7 @@ import numpy as np
 # from paddlecd.core import train
 
 from paddleseg.cvlibs import manager, Config
-from paddleseg.utils import get_sys_env, logger, config_check
+from paddleseg.utils import get_sys_env, logger, config_check, set_worker_init_seed
 from paddleseg.core import train
 
 yml2_path = r'/localnvme/project/MRSN/PaddleCD/c2seg_config/cxup_4b_BW.yml'
@@ -138,6 +138,7 @@ def main(args):
         paddle.seed(args.seed)
         np.random.seed(args.seed)
         random.seed(args.seed)
+        set_worker_init_seed(args.seed)
 
     log_path = logger.setup_file_logger(args.log_dir, args.cfg)
     if log_path:

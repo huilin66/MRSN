@@ -25,6 +25,13 @@ import paddle
 from paddleseg.utils import logger, seg_env
 from paddleseg.utils.download import download_file_and_uncompress
 
+WORKER_INIT_SEED = None
+
+def set_worker_init_seed(seed):
+    """Set a deterministic base seed for DataLoader worker processes."""
+    global WORKER_INIT_SEED
+    WORKER_INIT_SEED = seed
+
 
 @contextlib.contextmanager
 def generate_tempdir(directory: str = None, **kwargs):
@@ -122,4 +129,10 @@ def resume(model, optimizer, resume_model):
 
 
 def worker_init_fn(worker_id):
-    np.random.seed(random.randint(0, 100000))
+    if WORKER_INIT_SEED is None:
+        seed = random.randint(0, 100000)
+    else:
+        seed = WORKER_INIT_SEED + worker_id
+    np.random.seed(seed)
+    random.seed(seed)
+    paddle.seed(seed)
